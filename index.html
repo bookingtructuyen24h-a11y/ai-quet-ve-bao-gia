@@ -421,10 +421,8 @@ function fillIfKnown(field,value){
 }
 
 async function scanImage(){
- if(scanning)return;
- const key=val("apiKey");
- if(!key)return alert("Hãy nhập Gemini API Key.");
- if(!selectedImage)return alert("Hãy chọn hoặc dán ảnh vé.");
+  if(scanning)return;
+  if(!selectedImage)return alert("Hãy chọn hoặc dán ảnh vé.");
 
  scanning=true;
  $("scanBtn").disabled=true;

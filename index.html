@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AI Quét Vé & Copy Báo Giá</title>
+<title>Dán hành trình & Copy báo giá</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#edf3fa;font-family:Arial,sans-serif;color:#243750}
@@ -45,27 +45,17 @@ textarea{height:320px;line-height:1.65;resize:vertical;margin-top:10px}
 </head>
 <body>
 <main class="app">
-<h2>✈️ AI QUÉT VÉ & COPY BÁO GIÁ</h2>
-<p class="sub">Quét ảnh tự động • Hành lý • Ngày bay • Tính giá • Copy báo giá</p>
+<h2>✈️ DÁN HÀNH TRÌNH & COPY BÁO GIÁ</h2>
+<p class="sub">Dán chữ tự điền • Hành lý • Ngày bay • Tính giá • Copy báo giá</p>
 
-<div class="workspace"><section id="ticketEditor"><h3>🤖 1. AI QUÉT ẢNH VÉ</h3>
-<label>Google Gemini API Key</label>
-<input id="apiKey" type="password" autocomplete="off" placeholder="Dán Gemini API Key của bạn">
-<div class="grid" style="margin-top:9px">
-<button class="blue" id="saveKey" type="button" style="margin-top:0" onclick="saveGeminiKey()">🔐 LƯU API KEY</button>
-<button class="light" type="button" style="margin-top:0" onclick="clearGeminiKey()">XÓA KEY ĐÃ LƯU</button>
-</div>
-<div class="status" id="keyStatus">Chưa lưu API Key.</div>
-<div class="note">Key được lưu chỉ trên trình duyệt và địa chỉ trang này khi bạn bấm Lưu hoặc Quét. Không ghi Key vào GitHub; tránh dùng trên máy công cộng. Ảnh được gửi tới Google Gemini khi quét.</div>
-
-<div class="upload" id="dropArea">
- <b>📸 DÁN ẢNH BẰNG CTRL + V</b>
- <p>Hoặc nhấn vào đây để chọn ảnh vé</p>
- <input id="imageFile" type="file" accept="image/*" hidden>
- <img id="preview" alt="Ảnh vé">
-</div>
-<button class="blue" id="scanBtn" onclick="scanImage()">✨ QUÉT ẢNH BẰNG GEMINI AI</button>
-<div class="status" id="status">Chưa có ảnh. Hãy dán ảnh vé để bắt đầu.</div>
+<div class="workspace"><section id="ticketEditor"><h3>📋 1. DÁN THÔNG TIN CHUYẾN BAY</h3>
+<label for="sourceText">Copy phần chữ hành trình trên trang vé rồi dán vào đây</label>
+<textarea id="sourceText" style="height:190px" placeholder="Ví dụ: Hà Nội (HAN) → Osaka (KIX)
+Ngày đi 22/10/2026 • VJ938 • 01:20 - 07:50
+Ngày về 29/10/2026 • VJ939 • 09:20 - 13:05"></textarea>
+<div class="note">Tự nhận ngày, giờ và mã chuyến từ chữ vừa dán. Không dùng AI, không cần API Key. Ảnh có thể dán để đối chiếu; ảnh không được tự đọc chữ.</div>
+<details><summary>Ảnh đối chiếu (không bắt buộc)</summary><input id="imageFile" type="file" accept="image/*"><img id="preview" alt="Ảnh đối chiếu" style="display:none;max-width:100%;max-height:260px"></details>
+<div class="status" id="status">Dán chữ để tự điền và xem trước báo giá.</div>
 
 <h3>✈️ 2. HÃNG HÀNG KHÔNG & HÀNH TRÌNH</h3>
 <label>Hãng hàng không</label>
@@ -103,7 +93,7 @@ textarea{height:320px;line-height:1.65;resize:vertical;margin-top:10px}
 </div>
 <div class="note">Giờ địa phương tại từng sân bay. Kiểm tra ngày đến nếu chuyến bay qua đêm.</div>
 <div class="mini" id="flightSummary">
- Mã chuyến và giờ bay sẽ tự hiển thị ở đây sau khi AI đọc ảnh.
+ Mã chuyến và giờ bay sẽ tự hiển thị ở đây sau khi dán hành trình.
 </div>
 
 <h3>🧳 3. HÀNH LÝ TỰ ĐỘNG</h3>
@@ -326,7 +316,7 @@ function flightSummary(){
  }
  $("flightSummary").textContent=parts.length?
  parts.join("\n"):
- "Mã chuyến và giờ bay sẽ tự hiển thị ở đây sau khi AI đọc ảnh.";
+ "Mã chuyến và giờ bay sẽ tự hiển thị ở đây sau khi dán hành trình.";
  $("flightSummary").style.whiteSpace="pre-line";
 }
 
@@ -394,251 +384,56 @@ async function copyQuote(){
 }
 
 function useImage(file){
- if(!file || !file.type.startsWith("image/"))return;
+ if(!file||!file.type.startsWith("image/"))return;
  if(previewURL)URL.revokeObjectURL(previewURL);
  previewURL=URL.createObjectURL(file);
- selectedImage=file;
- $("preview").src=previewURL;
- $("preview").style.display="inline-block";
- $("status").textContent="✅ Đã nhận ảnh vé.";
- if(val("apiKey")){
-  scanImage();
- }else{
-  $("status").textContent+=" Nhập API Key rồi nhấn Quét ảnh.";
- }
+ $("preview").src=previewURL;$("preview").style.display="block";
 }
-
-$("dropArea").addEventListener("click",()=>{
- $("imageFile").click();
-});
-$("imageFile").addEventListener("click",e=>e.stopPropagation());
-$("imageFile").addEventListener("change",e=>{
- useImage(e.target.files[0]);
-});
-
+$("imageFile").addEventListener("change",e=>useImage(e.target.files[0]));
+function parsePastedTrip(text){
+ const flights=[...text.matchAll(/\b([A-Z][A-Z0-9]|[0-9][A-Z])\s?(\d{2,4})\b/g)].filter(m=>airlines.some(a=>a[0]===m[1]));
+ const dates=[...text.matchAll(/\b(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{4}))?\b/g)].filter(m=>+m[1]>=1&&+m[1]<=31&&+m[2]>=1&&+m[2]<=12);
+ const times=[...text.matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g)].map(m=>m[1].padStart(2,"0")+":"+m[2]);
+ const format=m=>m[1].padStart(2,"0")+"/"+m[2].padStart(2,"0")+(m[3]?"/"+m[3]:"");
+ const uniqueDates=[...new Set(dates.map(format))];
+ const ports=[];
+ for(const match of text.matchAll(/\b[A-Z]{3}\b/g)){
+  const port=airports.find(a=>a.includes("("+match[0]+")"));
+  if(port&&ports.at(-1)!==port)ports.push(port);
+ }
+ return {flights:flights.map(m=>m[1]+m[2]),dates:uniqueDates,times,ports};
+}
+function importPastedTrip(){
+ const text=val("sourceText");if(!text)return;
+ const r=parsePastedTrip(text);
+ detected={};
+ for(const id of ["from","to","outDate","returnDate","adultPrice","adultTax","childPrice","childTax","infantPrice"])$(id).value="";
+ $("adultQty").value=1;$("childQty").value=0;$("infantQty").value=0;
+ if(r.flights[0]){
+  detected.outFlight=r.flights[0];
+  const code=airlines.find(a=>r.flights[0].startsWith(a[0]));
+  if(code)$("airline").value=code[0];
+ }
+ if(r.flights[1])detected.returnFlight=r.flights[1];
+ const roundtrip=r.flights.length>1||/chiều về|ngày về|return|khứ hồi/i.test(text);
+ detected.tripType=roundtrip?"roundtrip":"oneway";
+ $("outDate").value=r.dates[0]||"";
+ if(roundtrip)$("returnDate").value=r.dates[1]||"";
+ $("from").value=r.ports[0]||"";$("to").value=r.ports[1]||"";
+ detected.outTime=r.times.slice(0,2).join(" → ");
+ if(roundtrip)detected.returnTime=r.times.slice(2,4).join(" → ");
+ changeAirline();fillFlightTimes();flightSummary();generate();
+ const missing=[];
+ if(!r.ports[1])missing.push("sân bay");if(!r.dates[0])missing.push("ngày bay");if(!r.times[1])missing.push("giờ bay");
+ $("status").textContent="✅ Đã lấy thông tin từ chữ vừa dán. "+(missing.length?"Chưa nhận được "+missing.join(", ")+". ":"")+"Kiểm tra hai chiều và ngày đến qua đêm; giá vé nhập riêng để tránh lấy nhầm tổng tiền.";
+}
+$("sourceText").addEventListener("input",importPastedTrip);
 document.addEventListener("paste",e=>{
- const items=e.clipboardData?.items||[];
- for(const item of items){
-  if(item.type.startsWith("image/")){
-   const file=item.getAsFile();
-   if(file){
-    e.preventDefault();
-    useImage(file);
-    break;
-   }
-  }
- }
+ if(["INPUT","TEXTAREA"].includes(e.target.tagName))return;
+ const text=e.clipboardData?.getData("text/plain");
+ if(text){e.preventDefault();$("sourceText").value=text;importPastedTrip();return;}
+ for(const item of e.clipboardData?.items||[]){if(item.type.startsWith("image/")){e.preventDefault();useImage(item.getAsFile());break;}}
 });
-
-function toBase64(file){
- return new Promise((resolve,reject)=>{
-  const reader=new FileReader();
-  reader.onload=()=>resolve(reader.result.split(",")[1]);
-  reader.onerror=reject;
-  reader.readAsDataURL(file);
- });
-}
-
-function money(value){
- if(value===null||value===undefined||value==="")return null;
- if(typeof value==="number"){
-  return Number.isSafeInteger(value)&&value>=0?value:null;
- }
- const s=String(value).trim();
- if(!/^\d+$/.test(s))return null;
- const n=Number(s);
- return Number.isSafeInteger(n)&&n>=0?n:null;
-}
-
-function fillIfKnown(field,value){
- if(value!==null && value!==undefined && String(value).trim()!==""){
-  $(field).value=String(value).trim();
- }
-}
-
-const GEMINI_KEY_STORAGE="ai-quet-ve-gemini-key-v2";
-function saveGeminiKey(){
- const key=val("apiKey");
- if(!key){$("keyStatus").textContent="❌ Chưa nhập Gemini API Key.";$("apiKey").focus();return false;}
- try{localStorage.setItem(GEMINI_KEY_STORAGE,key);$("keyStatus").textContent="✅ Đã lưu Key trên trình duyệt này.";return true;}
- catch(e){$("keyStatus").textContent="⚠️ Không lưu được. Có thể tiếp tục quét trong phiên này.";return false;}
-}
-function clearGeminiKey(){
- try{localStorage.removeItem(GEMINI_KEY_STORAGE);}catch(e){}
- $("apiKey").value="";$("keyStatus").textContent="Đã xóa Key khỏi trình duyệt này.";
-}
-try{const saved=localStorage.getItem(GEMINI_KEY_STORAGE);if(saved){$("apiKey").value=saved;$("keyStatus").textContent="✅ Đã tự điền Key đã lưu trên trang này.";}}catch(e){}
-
-let modelCache=null;
-const imageCache=new WeakMap();
-async function prepareScanImage(file){
- if(imageCache.has(file))return imageCache.get(file);
- const work=(async()=>{
-  if(!/^image\/(png|jpeg|webp)$/.test(file.type))return {data:await toBase64(file),mime:file.type||"image/png"};
-  const url=URL.createObjectURL(file);
-  try{
-   const img=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=url;});
-   const scale=Math.min(1,2200/Math.max(img.naturalWidth,img.naturalHeight));
-   const canvas=document.createElement("canvas");
-   canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
-   canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
-   const ctx=canvas.getContext("2d");
-   ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);
-   ctx.drawImage(img,0,0,canvas.width,canvas.height);
-   const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/jpeg",0.92));
-   if(blob && blob.size<file.size)return {data:await toBase64(blob),mime:"image/jpeg"};
-   return {data:await toBase64(file),mime:file.type};
-  }finally{URL.revokeObjectURL(url);}
- })();
- imageCache.set(file,work);
- try{return await work;}catch(e){imageCache.delete(file);throw e;}
-}
-async function getGeminiModel(key){
- if(modelCache && modelCache.key===key && Date.now()-modelCache.time<3600000)return modelCache.model;
- const resp=await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=100",{headers:{"x-goog-api-key":key}});
- const info=await resp.json();
- if(!resp.ok)throw new Error(info.error?.message||"Không thể lấy danh sách model Gemini.");
- const models=(info.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes("generateContent")).map(m=>m.name.replace(/^models\//,""));
- const preferred=["gemini-flash-latest",...models.filter(m=>/^gemini-[\d.]+-flash$/.test(m)).sort((a,b)=>b.localeCompare(a,undefined,{numeric:true}))];
- const model=preferred.find(m=>models.includes(m))||models.find(m=>/^gemini-[\d.]+-flash/.test(m));
- if(!model)throw new Error("API Key không có model Gemini Flash khả dụng.");
- modelCache={key,model,time:Date.now()};
- return model;
-}
-
-async function scanImage(){
-  if(scanning)return;
-  if(!selectedImage)return alert("Hãy chọn hoặc dán ảnh vé.");
- const geminiKey=val("apiKey");
- if(!geminiKey){$("status").textContent="❌ Chưa nhập Gemini API Key. Hãy dán Key vào ô đầu trang.";$("apiKey").focus();$("apiKey").scrollIntoView({behavior:"smooth",block:"center"});return;}
- saveGeminiKey();
-
- scanning=true;
- const scanStarted=performance.now();
- let scanStage="Chuẩn bị ảnh và chọn model";
- const scanTimer=setInterval(()=>{$("status").textContent="⏳ "+scanStage+" • "+Math.round((performance.now()-scanStarted)/1000)+" giây";},1000);
- $("scanBtn").disabled=true;
- $("status").textContent="⏳ Gemini đang đọc ảnh vé và giá tiền...";
-
- try{
-  const [prepared,model]=await Promise.all([prepareScanImage(selectedImage),getGeminiModel(geminiKey)]);
-  const prompt=`Đọc ảnh vé, chỉ trả JSON gọn, không giải thích. Chỉ ghi trường thấy rõ; thiếu thì bỏ qua, không đoán.
-Trường chuỗi: airline,airlineCode,from,to,tripType(oneway/roundtrip/unknown),outDate,returnDate(DD/MM/YYYY),outFlight,returnFlight,outTime,returnTime(HH:mm → HH:mm),carry,checked,currency(mã ISO),priceNote.
-Trường số nguyên: adultQty,childQty,infantQty,adultPrice,childPrice,infantPrice,adultTax,childTax,displayedPrice.
-Giá Price là giá một khách; Tax chỉ lấy khi tách riêng. Không suy ra giá mỗi khách từ tổng. Giá duy nhất chưa rõ điền displayedPrice. priceBasis chỉ per_adult/per_person nếu ảnh ghi rõ, hoặc total/unknown. Không quy đổi tiền, không đoán hành lý hay năm. Đọc đủ giờ khởi hành và đến của hai chiều. Không cộng thuế lần nữa khi giá đã gồm thuế.`;
-
- 
-scanStage="Đang chờ Gemini đọc ảnh ("+model+")";
-const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",{
- method:"POST",
- headers:{"Content-Type":"application/json","x-goog-api-key":geminiKey},
- body:JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:prepared.mime,data:prepared.data}}]}],generationConfig:{responseMimeType:"application/json",temperature:0,...(/^gemini-3\./.test(model)||model==="gemini-flash-latest"?{thinkingConfig:{thinkingLevel:"low"}}:/^gemini-2\.5/.test(model)?{thinkingConfig:{thinkingBudget:0}}:{})}})
-});
-const data=await response.json();
-if(!response.ok){if([400,404,410].includes(response.status))modelCache=null;throw new Error(data.error?.message||"Gemini từ chối yêu cầu ("+response.status+").");}
-const raw=data.candidates?.[0]?.content?.parts?.map(p=>p.text||"").join("")||"";
-if(!raw)throw new Error("Gemini không trả nội dung. Kiểm tra giới hạn API hoặc ảnh.");
-const r=JSON.parse(raw.replace(/^```json\s*/i,"").replace(/```$/g,"").trim());
-
-  detected=r;
-  fillFlightTimes();
-
-  // Nhận diện hãng bay
-  let known=null;
-  if(r.airlineCode){
-   known=airlines.find(a=>
-    a[0].toUpperCase()===String(r.airlineCode).toUpperCase()
-   );
-  }
-  if(!known&&r.airline){
-   known=airlines.find(a=>
-    a[1].toLowerCase()===String(r.airline).toLowerCase()
-   );
-  }
-  if(known){
-   $("airline").value=known[0];
-  }else if(r.airline){
-   $("airline").value="OTHER";
-   $("otherAirline").value=r.airline;
-  }
-  changeAirline();
-
-  // Hành trình và ngày bay
-  fillIfKnown("from",r.from);
-  fillIfKnown("to",r.to);
-  fillIfKnown("outDate",r.outDate);
-  fillIfKnown("returnDate",r.returnDate);
-
-  // Hành lý lấy từ ảnh, ưu tiên hơn gợi ý
-  fillIfKnown("carry",r.carry);
-  fillIfKnown("checked",r.checked);
-  flightSummary();
-
-  const warnings=[];
-  const currency=String(r.currency||"").trim().toUpperCase();
-  const isVND=["VND","VNĐ","DONG","ĐỒNG"].includes(currency);
-
-  // Xóa giá từ lần quét trước để tránh cộng nhầm
-  for(const id of [
-   "adultPrice","adultTax","childPrice","childTax","infantPrice"
-  ])$(id).value="";
-
-  if(isVND){
-   let adult=money(r.adultPrice);
-   const child=money(r.childPrice);
-   const infant=money(r.infantPrice);
-   const shown=money(r.displayedPrice);
-
-   if(adult===null && shown!==null){
-    if(["per_adult","per_person"].includes(r.priceBasis)){
-     adult=shown;
-    }else{
-     warnings.push(
-      "Ảnh có giá "+fmt(shown)+" VNĐ nhưng chưa xác định là giá một người. Vui lòng nhập tay."
-     );
-    }
-   }
-
-   const mapping=[
-    ["adultPrice",adult],
-    ["childPrice",child],
-    ["infantPrice",infant],
-    ["adultTax",money(r.adultTax)],
-    ["childTax",money(r.childTax)]
-   ];
-   for(const [id,value] of mapping){
-    if(value!==null)$(id).value=value;
-   }
-
-   for(const id of ["adultQty","childQty","infantQty"]){
-    const q=money(r[id]);
-    if(q!==null && q<=100)$(id).value=q;
-   }
-  }else{
-   warnings.push(currency?
-    "Ảnh dùng tiền "+currency+"; chưa quy đổi sang VNĐ.":
-    "Không xác định được đơn vị tiền. Vui lòng nhập giá bằng VNĐ."
-   );
-  }
-
-  calculate();
-  generate();
-
-  if(r.priceNote)warnings.push(String(r.priceNote));
-
-  $("status").textContent=warnings.length?
-   "⚠️ "+warnings.join("\n"):
-   "✅ Đã quét xong! Kiểm tra lại ngày, giờ, hành lý, giá và số khách trước khi gửi.";
-
- }catch(err){
-  $("status").textContent="❌ "+(err instanceof TypeError && /fetch/i.test(err.message)?"Không thể kết nối tới Gemini API. Kiểm tra mạng, tiện ích chặn quảng cáo hoặc quyền truy cập Google API.":err.message);
- }finally{
-  clearInterval(scanTimer);
-  $("status").textContent+=" ("+Math.round((performance.now()-scanStarted)/1000)+" giây)";
-  scanning=false;
-  $("scanBtn").disabled=false;
- }
-}
 
 function resetForm(){
  for(const id of [
@@ -658,7 +453,8 @@ function resetForm(){
  previewURL=null;
  $("preview").style.display="none";
  $("imageFile").value="";
- $("status").textContent="Sẵn sàng quét ảnh mới.";
+ $("sourceText").value="";
+ $("status").textContent="Dán chữ hành trình mới để tự điền.";
  changeAirline();
  flightSummary();
  calculate();
@@ -668,11 +464,11 @@ changeAirline();
 flightSummary();
 calculate();
 $("ticketEditor").addEventListener("input",event=>{
- if(["apiKey","imageFile"].includes(event.target.id))return;
+ if(["sourceText","imageFile"].includes(event.target.id))return;
  generate();
 });
 $("ticketEditor").addEventListener("change",event=>{
- if(["apiKey","imageFile"].includes(event.target.id))return;
+ if(["sourceText","imageFile"].includes(event.target.id))return;
  generate();
 });
 </script>

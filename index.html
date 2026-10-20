@@ -76,7 +76,7 @@ textarea{height:320px;line-height:1.65;resize:vertical;margin-top:10px}
 .vq-foot{text-align:center;color:#718096;font-size:10px;padding-bottom:3px}
 .quotePanel .note{margin:5px 0}.quotePanel #output{height:175px;min-height:175px;font-size:12px;margin-top:7px}
 .quotePanel button{padding:10px;margin-top:7px}
-.vq-source{border:1px solid #e6eaf0;border-radius:9px;padding:8px;background:white}.vq-source b{display:block;font-size:11px;color:#526179;margin-bottom:6px}.vq-source img{display:block;max-width:100%;max-height:320px;object-fit:contain;margin:auto;border-radius:5px}.source-option{display:flex;align-items:center;gap:8px;margin:10px 0 3px;font-size:12px}.source-option input{width:auto;margin:0}.quote-download-note{font-size:11px;color:#64748b;margin:4px 0 0}.discount-bar{display:flex;align-items:center;gap:8px;margin-top:8px}.discount-bar label{margin:0;flex:1}.discount-bar input{max-width:90px;padding:7px}
+.quote-download-note{font-size:11px;color:#64748b;margin:4px 0 0}.discount-bar{display:flex;align-items:center;gap:8px;margin-top:8px}.discount-bar label{margin:0;flex:1}.discount-bar input{max-width:90px;padding:7px}
 </style>
 </head>
 <body>
@@ -168,8 +168,8 @@ textarea{height:320px;line-height:1.65;resize:vertical;margin-top:10px}
 </div>
 
 </section><aside class="quotePanel"><h3>📋 XEM TRƯỚC BÁO GIÁ</h3><p class="note">Nội dung tự cập nhật khi bạn sửa thông tin bên trái. Có thể chỉnh trực tiếp trước khi copy.</p>
-<div class="discount-bar"><label for="discountPercent">🎁 Giảm giá (%) – nếu có</label><input id="discountPercent" type="number" min="0" max="100" value="0" oninput="generate()"></div>
-<label class="source-option"><input id="includeOriginal" type="checkbox" checked onchange="generate()"> Ghép ảnh vé gốc vào ảnh báo giá gửi khách</label>
+<div class="discount-bar"><label for="discountPercent">🎁 Nhập % giảm giá để tính số tiền còn lại</label><input id="discountPercent" type="number" min="0" max="100" value="0" oninput="generate()"></div>
+<div class="note">Ảnh vé gốc chỉ dùng để nhận diện, không xuất hiện trong ảnh báo giá gửi khách.</div>
 <div id="visualQuote" class="visual-quote" aria-label="Báo giá màu xem trước"></div>
 <button class="blue" onclick="generate()">CẬP NHẬT BÁO GIÁ</button>
 <button class="green" id="saveQuoteImage" onclick="copyQuoteImage()">📋 COPY ẢNH BÁO GIÁ</button>
@@ -346,19 +346,23 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 else loadHtml2Canvas().catch(()=>{});
 async function copyQuoteImage(){
  const btn=$('saveQuoteImage'),status=$('imageDownloadStatus');
- btn.disabled=true;btn.textContent='⏳ ĐANG COPY ẢNH...';status.textContent='Đang tạo ảnh để sao chép...';
+ btn.disabled=true;btn.textContent='⏳ ĐANG COPY ẢNH...';status.textContent='Đang sao chép ảnh báo giá...';
  try{
   generate();
-  if(!navigator.clipboard?.write || !window.ClipboardItem){
-   throw new Error('Trình duyệt không hỗ trợ COPY ảnh. Hãy mở công cụ bằng Chrome/Edge qua HTTPS hoặc môi trường bảo mật');
+  if(!navigator.clipboard?.write || !window.ClipboardItem || !window.isSecureContext){
+   throw new Error('Hãy dùng trang GitHub Pages (HTTPS) trên Chrome/Edge để COPY ảnh');
   }
-  const capture=await loadHtml2Canvas();
-  const canvas=await capture($('visualQuote'),{scale:2,backgroundColor:'#ffffff',useCORS:true,logging:false});
-  const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Không tạo được ảnh PNG')),'image/png'));
-  await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-  status.textContent='✅ ĐÃ COPY ẢNH! Mở Zalo/Messenger, chọn ô chat và nhấn Ctrl + V để gửi khách.';
+  // Đưa thao tác clipboard.write vào ngay trong lần bấm nút.
+  // Trình duyệt hỗ trợ ClipboardItem với Promise sẽ chờ ảnh PNG render xong.
+  const pngPromise=(async()=>{
+   const capture=await loadHtml2Canvas();
+   const canvas=await capture($('visualQuote'),{scale:2,backgroundColor:'#ffffff',useCORS:true,logging:false});
+   return await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Không tạo được ảnh PNG')),'image/png'));
+  })();
+  await navigator.clipboard.write([new ClipboardItem({'image/png':pngPromise})]);
+  status.textContent='✅ ĐÃ COPY ẢNH! Mở Zalo/Messenger và nhấn Ctrl + V để dán ảnh.';
  }catch(e){
-  status.textContent='⚠️ Chưa COPY được ảnh: '+e.message+'. Hãy cho phép quyền clipboard khi Chrome hỏi và thử lại.';
+  status.textContent='⚠️ COPY ảnh chưa thành công: '+e.message+'. Hãy dùng Chrome/Edge và cấp quyền clipboard cho trang HTTPS.';
  }finally{btn.disabled=false;btn.textContent='📋 COPY ẢNH BÁO GIÁ';}
 }
 
@@ -423,15 +427,6 @@ function flightSummary(){
 function hasTicketPrice(){
  return [["adultQty","adultPrice"],["childQty","childPrice"],["infantQty","infantPrice"]].some(([q,p])=>number(q)>0&&val(p)!=="");
 }
-function updateOriginalQuote(){
- const old=$('originalQuote'); if(old)old.remove();
- if(!selectedImage||!$('includeOriginal').checked||!previewURL)return;
- const section=document.createElement('div');section.className='vq-source';section.id='originalQuote';
- const heading=document.createElement('b');heading.textContent='📎 ẢNH VÉ GỐC ĐÍNH KÈM';
- const pic=document.createElement('img');pic.src=previewURL;pic.alt='Ảnh vé gốc';
- section.append(heading,pic);
- $('visualQuote').querySelector('.vq-content').appendChild(section);
-}
 function generate(){
  const total=calculate();
  renderVisualQuote(total);
@@ -470,7 +465,7 @@ function generate(){
  lines.push(
   "━━━━━━━━━━━━━━━━━━",
   "🎁🎁🎁 GIÁ VÉ ƯU ĐÃI ĐẶC BIỆT",
-  ...(Number(val("discountPercent"))>0?["🎁 Giảm giá: "+Number(val("discountPercent"))+"%"]:[]),
+  ...(Number(val("discountPercent"))>0?["🎁 Giảm giá: "+Number(val("discountPercent"))+"% (−"+fmt(total*Math.min(100,Math.max(0,number("discountPercent")))/100)+" VNĐ)"]:[]),
   "💰 TỔNG THANH TOÁN: "+(hasTicketPrice()?fmt(total*(1-Math.min(100,Math.max(0,number("discountPercent")))/100))+" VNĐ":"Chưa nhập giá"),
   "━━━━━━━━━━━━━━━━━━",
   "Giá vé, lịch bay và hành lý cần xác nhận theo điều kiện đặt chỗ thực tế."
@@ -488,8 +483,8 @@ function renderVisualQuote(total){
  const leg=(direction,from,to,date,time,flight)=>`<div class="vq-leg"><div class="vq-leg-top"><span>✈ ${direction}</span><span>${esc(date||"Chưa có ngày")}</span></div><div class="vq-route"><span>${esc(from||"Điểm đi")}</span><i>✈ →</i><span>${esc(to||"Điểm đến")}</span></div><div class="vq-meta"><span>🕒 ${esc(time||"--:--")}</span><span>${esc(flight||"Chưa có mã chuyến")}</span></div></div>`;
  const from=val("from"),to=val("to");
  const final=total*(1-discount/100);
- el.innerHTML=`<div class="vq-header"><div><b>✈ BÁO GIÁ VÉ MÁY BAY</b><small>${esc(selectedAirline())}</small></div><span class="vq-pill">${roundtrip?"KHỨ HỒI":"MỘT CHIỀU"}</span></div><div class="vq-content">${leg("CHIỀU ĐI",from,to,val("outDate"),detected.outTime,detected.outFlight)}${roundtrip?leg("CHIỀU VỀ",to,from,val("returnDate"),detected.returnTime,detected.returnFlight):""}<div class="vq-baggage">🧳 ${esc(val("carry"))} xách tay · ${esc(val("checked"))} ký gửi</div><div class="vq-price"><div class="vq-price-row"><span>Giá vé (${number("adultQty")} NL · ${number("childQty")} TE · ${number("infantQty")} EB)</span><b>${hasTicketPrice()?fmt(total)+" đ":"Chưa nhập giá"}</b></div>${discount&&hasTicketPrice()?`<div class="vq-price-row"><span>Ưu đãi -${discount}%</span><b>− ${fmt(total-final)} đ</b></div>`:""}<div class="vq-final"><b>TỔNG CỘNG</b><strong>${hasTicketPrice()?fmt(final)+" đ":"Chưa nhập giá"}</strong></div></div><div class="vq-foot">Giá và hành lý cần xác nhận theo vé thực tế</div></div>`;
- updateOriginalQuote();
+ el.innerHTML=`<div class="vq-header"><div><b>✈ BÁO GIÁ VÉ MÁY BAY</b><small>${esc(selectedAirline())}</small></div><span class="vq-pill">${roundtrip?"KHỨ HỒI":"MỘT CHIỀU"}</span></div><div class="vq-content">${leg("CHIỀU ĐI",from,to,val("outDate"),detected.outTime,detected.outFlight)}${roundtrip?leg("CHIỀU VỀ",to,from,val("returnDate"),detected.returnTime,detected.returnFlight):""}<div class="vq-baggage">🧳 ${esc(val("carry"))} xách tay · ${esc(val("checked"))} ký gửi</div><div class="vq-price"><div class="vq-price-row"><span>Giá vé (${number("adultQty")} NL · ${number("childQty")} TE · ${number("infantQty")} EB)</span><b>${hasTicketPrice()?fmt(total)+" đ":"Chưa nhập giá"}</b></div>${discount&&hasTicketPrice()?`<div class="vq-price-row"><span>🎁 Giảm ${discount}%</span><b>− ${fmt(total-final)} đ</b></div>`:""}<div class="vq-final"><b>TỔNG CỘNG</b><strong>${hasTicketPrice()?fmt(final)+" đ":"Chưa nhập giá"}</strong></div></div><div class="vq-foot">Giá và hành lý cần xác nhận theo vé thực tế</div></div>`;
+
 }
 
 async function copyQuote(){
@@ -624,7 +619,7 @@ function resetForm(){
  if(previewURL)URL.revokeObjectURL(previewURL);
  previewURL=null;
  $("preview").style.display="none";
- $("includeOriginal").checked=true;
+
  $("imageFile").value="";
  $("sourceText").value="";
  $("status").textContent="Dán ảnh vé mới để tự điền.";

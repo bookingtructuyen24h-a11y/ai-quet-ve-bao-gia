@@ -609,11 +609,48 @@ function parsePastedTrip(text){
  return {legs, flights:legs.map(x=>x.flight),dates:[...new Set(allDates)],times:allTimes,ports:allPorts,
   routes:routes.map(x=>x.route)};
 }
+// Đọc giá từ chữ OCR: ưu tiên dòng tổng, tránh lấy nhầm giá từng chặng.
+function parseTicketMoney(raw){
+ const rows=raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ const amounts=t=>{
+  const found=[];
+  const re=/(?:\d{1,3}(?:[.,\s]\d{3}){1,3}|\d{5,10})(?:\s*(?:đ|₫|VND|VNĐ))?/gi;
+  for(const m of t.matchAll(re)){
+   const v=Number(m[0].replace(/[^\d]/g,''));
+   if(v>=10000 && v<=1000000000)found.push(v);
+  }
+  return found;
+ };
+ const totalLabel=/(?:tổng\s*(?:giá\s*vé|tiền|cộng|thanh\s*toán)|total\s*(?:fare|price|amount)|grand\s*total|amount\s*due)/i;
+ const feeLabel=/(?:thuế\s*\+?\s*phí|tax(?:es)?\s*(?:\+|and)?\s*(?:fee|charge))/i;
+ const fareLabel=/(?:vé\s*người\s*lớn|giá\s*vé|base\s*fare|adult\s*fare)/i;
+ let sum=null,fee=null,fare=null;
+ for(let i=0;i<rows.length;i++){
+  let r=rows[i];
+  // Tìm giá sau nhãn, hoặc ở dòng kế nếu OCR ngắt hàng.
+  const get=rx=>{
+   const m=r.match(rx);if(!m)return null;
+   const direct=amounts(r.slice(m.index+m[0].length));
+   if(direct.length)return direct.at(-1);
+   const next=rows[i+1]||'';
+   return /^(?:[\d\s.,]+\s*(?:đ|₫|VND|VNĐ)?)$/i.test(next)?amounts(next)[0]||null:null;
+  };
+  if(totalLabel.test(r)){const v=get(totalLabel);if(v!==null)sum=v;}
+  else if(feeLabel.test(r)){const v=get(feeLabel);if(v!==null)fee=v;}
+  else if(fareLabel.test(r)){const v=get(fareLabel);if(v!==null)fare=v;}
+ }
+ if(sum!==null)return {total:sum,source:'tổng giá vé'};
+ // Chỉ cộng nếu cả giá vé lẫn thuế phí đều đọc được rõ ràng.
+ if(fare!==null&&fee!==null)return {total:fare+fee,source:'giá vé + thuế phí'};
+ return null;
+}
 function importPastedTrip(){
  const text=val('sourceText');if(!text)return;
  const r=parsePastedTrip(text);
  detected={};
  for(const id of ['from','to','outDate','returnDate','adultPrice','childPrice','infantPrice'])$(id).value='';
+ const detectedPrice=parseTicketMoney(text);
+ if(detectedPrice)$('adultPrice').value=detectedPrice.total;
  $('discountPercent').value=0;
  $('adultQty').value=1;$('childQty').value=0;$('infantQty').value=0;
  if(r.flights[0]){
@@ -646,7 +683,8 @@ function importPastedTrip(){
  if(!$('from').value||!$('to').value)missing.push('điểm đi/đến');
  if(!$('outDate').value)missing.push('ngày bay');
  if(!detected.outTime.includes('→'))missing.push('giờ bay');
- $('status').textContent=(conflicts?'⚠️ Có nhiều chặng nhưng chưa xác nhận khứ hồi; kiểm tra hành trình. ':roundtrip?'✅ Đã nhận diện vé KHỨ HỒI. ':'✅ Đã nhận diện vé MỘT CHIỀU. ')+(missing.length?'Chưa nhận được '+missing.join(', ')+'. ':'')+'Kiểm tra lại thông tin trước khi gửi khách.';
+ if(!detectedPrice)missing.push('tổng tiền vé');
+ $('status').textContent=(conflicts?'⚠️ Có nhiều chặng nhưng chưa xác nhận khứ hồi; kiểm tra hành trình. ':roundtrip?'✅ Đã nhận diện vé KHỨ HỒI. ':'✅ Đã nhận diện vé MỘT CHIỀU. ')+(missing.length?'Chưa nhận được '+missing.join(', ')+'. ':'')+(detectedPrice?'Đã đọc tổng tiền '+fmt(detectedPrice.total)+' VNĐ ('+detectedPrice.source+'). ':'')+'Kiểm tra lại thông tin trước khi gửi khách.';
 }
 $("sourceText").addEventListener("input",importPastedTrip);
 document.addEventListener("paste",e=>{

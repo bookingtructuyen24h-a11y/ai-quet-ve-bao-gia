@@ -33,6 +33,14 @@ button:disabled{opacity:.5;cursor:wait}
 textarea{height:320px;line-height:1.65;resize:vertical;margin-top:10px}
 .mini{background:#f4f8fe;border-radius:8px;padding:11px;margin-top:10px;font-size:12px;line-height:1.6;color:#4c6787}
 @media(max-width:530px){.app{margin:0;padding:15px;border-radius:0}.grid,.three{grid-template-columns:1fr}h2{font-size:20px}}
+
+.app{max-width:1360px;margin:22px auto;padding:24px}
+.workspace{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;align-items:start}
+#ticketEditor,.quotePanel{min-width:0}
+.quotePanel{position:sticky;top:18px;background:#f7faff;border:1px solid #dce8f6;border-radius:14px;padding:18px;margin-top:23px}
+.quotePanel h3{margin-top:0}
+#output{height:60vh;min-height:390px;background:white;font-size:14px}
+@media(max-width:860px){.workspace{grid-template-columns:1fr}.quotePanel{position:static;margin-top:0}.app{margin:0;padding:16px}#output{height:480px}}
 </style>
 </head>
 <body>
@@ -40,7 +48,7 @@ textarea{height:320px;line-height:1.65;resize:vertical;margin-top:10px}
 <h2>✈️ AI QUÉT VÉ & COPY BÁO GIÁ</h2>
 <p class="sub">Quét ảnh tự động • Hành lý • Ngày bay • Tính giá • Copy báo giá</p>
 
-<h3>🤖 1. AI QUÉT ẢNH VÉ</h3>
+<div class="workspace"><section id="ticketEditor"><h3>🤖 1. AI QUÉT ẢNH VÉ</h3>
 <label>Google Gemini API Key</label>
 <input id="apiKey" type="password" autocomplete="off" placeholder="Dán Gemini API Key của bạn">
 <div class="grid" style="margin-top:9px">
@@ -144,12 +152,12 @@ textarea{height:320px;line-height:1.65;resize:vertical;margin-top:10px}
  <strong id="total">0 VNĐ</strong>
 </div>
 
-<h3>📋 5. COPY BÁO GIÁ</h3>
+</section><aside class="quotePanel"><h3>📋 XEM TRƯỚC BÁO GIÁ</h3><p class="note">Nội dung tự cập nhật khi bạn sửa thông tin bên trái. Có thể chỉnh trực tiếp trước khi copy.</p>
 <button class="blue" onclick="generate()">TẠO NỘI DUNG BÁO GIÁ</button>
 <textarea id="output" placeholder="Nội dung báo giá sẽ xuất hiện tại đây. Bạn có thể chỉnh sửa trước khi copy."></textarea>
 <button class="green" onclick="copyQuote()">📋 COPY BÁO GIÁ</button>
 <button class="light" onclick="resetForm()">LÀM MỚI</button>
-</main>
+</aside></div></main>
 
 <script>
 "use strict";
@@ -659,6 +667,14 @@ function resetForm(){
 changeAirline();
 flightSummary();
 calculate();
+$("ticketEditor").addEventListener("input",event=>{
+ if(["apiKey","imageFile"].includes(event.target.id))return;
+ generate();
+});
+$("ticketEditor").addEventListener("change",event=>{
+ if(["apiKey","imageFile"].includes(event.target.id))return;
+ generate();
+});
 </script>
 </body>
 </html>

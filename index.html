@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Dán hành trình & Copy báo giá</title>
+<title>Đọc ảnh vé & Copy báo giá</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#edf3fa;font-family:Arial,sans-serif;color:#243750}
@@ -45,17 +45,16 @@ textarea{height:320px;line-height:1.65;resize:vertical;margin-top:10px}
 </head>
 <body>
 <main class="app">
-<h2>✈️ DÁN HÀNH TRÌNH & COPY BÁO GIÁ</h2>
-<p class="sub">Dán chữ tự điền • Hành lý • Ngày bay • Tính giá • Copy báo giá</p>
+<h2>✈️ ĐỌC ẢNH VÉ & COPY BÁO GIÁ</h2>
+<p class="sub">Dán ảnh tự điền • Hành lý • Ngày bay • Tính giá • Copy báo giá</p>
 
-<div class="workspace"><section id="ticketEditor"><h3>📋 1. DÁN THÔNG TIN CHUYẾN BAY</h3>
-<label for="sourceText">Copy phần chữ hành trình trên trang vé rồi dán vào đây</label>
-<textarea id="sourceText" style="height:190px" placeholder="Ví dụ: Hà Nội (HAN) → Osaka (KIX)
-Ngày đi 22/10/2026 • VJ938 • 01:20 - 07:50
-Ngày về 29/10/2026 • VJ939 • 09:20 - 13:05"></textarea>
-<div class="note">Tự nhận ngày, giờ và mã chuyến từ chữ vừa dán. Không dùng AI, không cần API Key. Ảnh có thể dán để đối chiếu; ảnh không được tự đọc chữ.</div>
-<details><summary>Ảnh đối chiếu (không bắt buộc)</summary><input id="imageFile" type="file" accept="image/*"><img id="preview" alt="Ảnh đối chiếu" style="display:none;max-width:100%;max-height:260px"></details>
-<div class="status" id="status">Dán chữ để tự điền và xem trước báo giá.</div>
+<div class="workspace"><section id="ticketEditor"><h3>📸 1. DÁN ẢNH VÉ</h3>
+<div class="upload" id="dropArea" tabindex="0" role="button" aria-label="Chọn ảnh vé"><b>CTRL + V ĐỂ DÁN ẢNH VÉ</b><p>Hoặc bấm để chọn ảnh • Tự đọc ngày, giờ và mã chuyến</p><img id="preview" alt="Ảnh vé" style="display:none;max-width:100%;max-height:300px"></div>
+<input id="imageFile" type="file" accept="image/*" hidden>
+<button class="blue" id="ocrButton" onclick="readTicketImage()">ĐỌC LẠI ẢNH</button>
+<div class="status" id="status">Dán ảnh vé để tự điền và xem trước báo giá.</div>
+<div class="note">Không dùng Gemini, không cần API Key. Lần đầu cần tải bộ đọc chữ; các lần sau dùng lại. Kiểm tra chữ nhận dạng trước khi gửi khách.</div>
+<details><summary>Xem / sửa chữ đọc từ ảnh</summary><textarea id="sourceText" style="height:160px" placeholder="Chữ đọc từ ảnh sẽ hiện tại đây"></textarea></details>
 
 <h3>✈️ 2. HÃNG HÀNG KHÔNG & HÀNH TRÌNH</h3>
 <label>Hãng hàng không</label>
@@ -93,7 +92,7 @@ Ngày về 29/10/2026 • VJ939 • 09:20 - 13:05"></textarea>
 </div>
 <div class="note">Giờ địa phương tại từng sân bay. Kiểm tra ngày đến nếu chuyến bay qua đêm.</div>
 <div class="mini" id="flightSummary">
- Mã chuyến và giờ bay sẽ tự hiển thị ở đây sau khi dán hành trình.
+ Mã chuyến và giờ bay sẽ tự hiển thị ở đây sau khi đọc ảnh.
 </div>
 
 <h3>🧳 3. HÀNH LÝ TỰ ĐỘNG</h3>
@@ -316,7 +315,7 @@ function flightSummary(){
  }
  $("flightSummary").textContent=parts.length?
  parts.join("\n"):
- "Mã chuyến và giờ bay sẽ tự hiển thị ở đây sau khi dán hành trình.";
+ "Mã chuyến và giờ bay sẽ tự hiển thị ở đây sau khi đọc ảnh.";
  $("flightSummary").style.whiteSpace="pre-line";
 }
 
@@ -383,12 +382,52 @@ async function copyQuote(){
  }
 }
 
+let ocrWorkerPromise=null;
+let imageRevision=0;
+function loadOCR(){
+ if(window.Tesseract)return Promise.resolve();
+ return new Promise((resolve,reject)=>{
+  const script=document.createElement("script");
+  script.src="https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js";
+  script.onload=resolve;script.onerror=()=>{script.remove();reject(new Error("Không tải được bộ đọc chữ. Kiểm tra kết nối mạng rồi thử lại."));};
+  document.head.appendChild(script);
+ });
+}
+async function getOCRWorker(){
+ if(!ocrWorkerPromise)ocrWorkerPromise=(async()=>{
+  await loadOCR();
+  return Tesseract.createWorker("eng+vie",1,{logger:m=>{
+   if(scanning)$("status").textContent="⏳ "+(m.status==="recognizing text"?"Đang đọc chữ trong ảnh":"Đang chuẩn bị bộ đọc chữ")+(typeof m.progress==="number"?" • "+Math.round(m.progress*100)+"%":"");
+  }});
+ })().catch(e=>{ocrWorkerPromise=null;throw e;});
+ return ocrWorkerPromise;
+}
+async function readTicketImage(){
+ if(scanning||!selectedImage)return;
+ scanning=true;$("ocrButton").disabled=true;
+ const revision=imageRevision, file=selectedImage, start=performance.now();
+ $("status").textContent="⏳ Đang chuẩn bị đọc ảnh...";
+ try{
+  const worker=await getOCRWorker();
+  const result=await worker.recognize(file);
+  if(revision!==imageRevision)return;
+  const text=result.data.text.trim();
+  if(!text)throw new Error("Không đọc được chữ. Hãy cắt sát phần hành trình và dùng ảnh rõ hơn.");
+  $("sourceText").value=text;importPastedTrip();
+  $("status").textContent+=" • "+((performance.now()-start)/1000).toFixed(1)+" giây";
+ }catch(e){if(revision===imageRevision)$("status").textContent="❌ "+e.message;}
+ finally{scanning=false;$("ocrButton").disabled=false;if(revision!==imageRevision&&selectedImage)readTicketImage();}
+}
 function useImage(file){
  if(!file||!file.type.startsWith("image/"))return;
+ imageRevision++;selectedImage=file;
  if(previewURL)URL.revokeObjectURL(previewURL);
  previewURL=URL.createObjectURL(file);
  $("preview").src=previewURL;$("preview").style.display="block";
+ readTicketImage();
 }
+$("dropArea").addEventListener("click",()=>$("imageFile").click());
+$("dropArea").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();$("imageFile").click();}});
 $("imageFile").addEventListener("change",e=>useImage(e.target.files[0]));
 function parsePastedTrip(text){
  const flights=[...text.matchAll(/\b([A-Z][A-Z0-9]|[0-9][A-Z])\s?(\d{2,4})\b/g)].filter(m=>airlines.some(a=>a[0]===m[1]));
@@ -425,10 +464,11 @@ function importPastedTrip(){
  changeAirline();fillFlightTimes();flightSummary();generate();
  const missing=[];
  if(!r.ports[1])missing.push("sân bay");if(!r.dates[0])missing.push("ngày bay");if(!r.times[1])missing.push("giờ bay");
- $("status").textContent="✅ Đã lấy thông tin từ chữ vừa dán. "+(missing.length?"Chưa nhận được "+missing.join(", ")+". ":"")+"Kiểm tra hai chiều và ngày đến qua đêm; giá vé nhập riêng để tránh lấy nhầm tổng tiền.";
+ $("status").textContent="✅ Đã điền thông tin nhận dạng được. "+(missing.length?"Chưa nhận được "+missing.join(", ")+". ":"")+"Kiểm tra hai chiều và ngày đến qua đêm; giá vé nhập riêng để tránh lấy nhầm tổng tiền.";
 }
 $("sourceText").addEventListener("input",importPastedTrip);
 document.addEventListener("paste",e=>{
+ for(const item of e.clipboardData?.items||[]){if(item.type.startsWith("image/")){e.preventDefault();useImage(item.getAsFile());return;}}
  if(["INPUT","TEXTAREA"].includes(e.target.tagName))return;
  const text=e.clipboardData?.getData("text/plain");
  if(text){e.preventDefault();$("sourceText").value=text;importPastedTrip();return;}
@@ -448,13 +488,14 @@ function resetForm(){
  $("otherAirline").value="";
  detected={};
  fillFlightTimes();
+ imageRevision++;
  selectedImage=null;
  if(previewURL)URL.revokeObjectURL(previewURL);
  previewURL=null;
  $("preview").style.display="none";
  $("imageFile").value="";
  $("sourceText").value="";
- $("status").textContent="Dán chữ hành trình mới để tự điền.";
+ $("status").textContent="Dán ảnh vé mới để tự điền.";
  changeAirline();
  flightSummary();
  calculate();

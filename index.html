@@ -511,55 +511,10 @@ async function scanImage(){
 
  try{
   const [prepared,model]=await Promise.all([prepareScanImage(selectedImage),getGeminiModel(geminiKey)]);
-  const prompt=`Đọc chính xác ảnh vé máy bay hoặc màn hình tìm chuyến bay.
-Trả về duy nhất JSON hợp lệ:
-{
-"airline":"",
-"airlineCode":"",
-"from":"",
-"to":"",
-"tripType":"",
-"outDate":"",
-"returnDate":"",
-"outFlight":"",
-"returnFlight":"",
-"outTime":"",
-"returnTime":"",
-"carry":"",
-"checked":"",
-"adultQty":null,
-"childQty":null,
-"infantQty":null,
-"adultPrice":null,
-"childPrice":null,
-"infantPrice":null,
-"adultTax":null,
-"childTax":null,
-"displayedPrice":null,
-"priceBasis":"unknown",
-"currency":"",
-"priceNote":""
-}
-
-QUY TẮC:
-- tripType: oneway, roundtrip hoặc unknown.
-- Ngày dùng DD/MM/YYYY.
-- outTime và returnTime là giờ khởi hành → giờ đến.
-- Chỉ trả về mã chuyến, ngày giờ, sân bay đúng như trong ảnh.
-- Không tự suy đoán số kg hành lý hoặc giá tiền.
-- Nếu thiếu thì dùng chuỗi rỗng hoặc null.
-- adultPrice, childPrice, infantPrice là giá MỘT khách.
-- Thuế phí chỉ điền nếu ảnh tách riêng thuế phí.
-- Nếu ảnh ghi một giá duy nhất, điền displayedPrice.
-- priceBasis: per_adult, per_person, total hoặc unknown.
-- Chỉ dùng per_adult/per_person khi ảnh ghi rõ giá mỗi khách.
-- Nếu giá đã bao gồm thuế phí, không tách thêm thuế.
-- Giá tiền dạng số nguyên không dấu phân cách.
-- currency dùng mã VND, USD, KRW, AUD, JPY...
-- Không tính giảm giá, không tự quy đổi tiền tệ.
-- Không suy ra giá một khách từ tổng tiền.
-- Không nhầm số ghế, ngày, mã chuyến thành giá tiền.
-- Không trả thêm chữ bên ngoài JSON.`;
+  const prompt=`Đọc ảnh vé, chỉ trả JSON gọn, không giải thích. Chỉ ghi trường thấy rõ; thiếu thì bỏ qua, không đoán.
+Trường chuỗi: airline,airlineCode,from,to,tripType(oneway/roundtrip/unknown),outDate,returnDate(DD/MM/YYYY),outFlight,returnFlight,outTime,returnTime(HH:mm → HH:mm),carry,checked,currency(mã ISO),priceNote.
+Trường số nguyên: adultQty,childQty,infantQty,adultPrice,childPrice,infantPrice,adultTax,childTax,displayedPrice.
+Giá Price là giá một khách; Tax chỉ lấy khi tách riêng. Không suy ra giá mỗi khách từ tổng. Giá duy nhất chưa rõ điền displayedPrice. priceBasis chỉ per_adult/per_person nếu ảnh ghi rõ, hoặc total/unknown. Không quy đổi tiền, không đoán hành lý hay năm. Đọc đủ giờ khởi hành và đến của hai chiều. Không cộng thuế lần nữa khi giá đã gồm thuế.`;
 
  
 const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",{

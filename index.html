@@ -97,6 +97,10 @@ textarea{height:320px;line-height:1.65;resize:vertical;margin-top:10px}
 <select id="airline" onchange="changeAirline()"></select>
 <input id="otherAirline" placeholder="Nhập tên hãng khác" style="display:none;margin-top:9px">
 
+<label for="tripMode">Loại hành trình (tự nhận từ ảnh; có thể sửa)</label>
+<select id="tripMode" onchange="detected.tripType=this.value; if(this.value==='oneway'){ $('returnDate').value=''; detected.returnFlight=''; detected.returnTime=''; fillFlightTimes(); } generate();">
+<option value="oneway">Một chiều</option><option value="roundtrip">Khứ hồi</option><option value="connecting">Nối chuyến / nhiều chặng</option>
+</select>
 <div class="grid">
  <div>
   <label>Điểm đi</label>
@@ -173,6 +177,7 @@ textarea{height:320px;line-height:1.65;resize:vertical;margin-top:10px}
 <div id="visualQuote" class="visual-quote" aria-label="Báo giá màu xem trước"></div>
 <button class="blue" onclick="generate()">CẬP NHẬT BÁO GIÁ</button>
 <button class="green" id="saveQuoteImage" onclick="copyQuoteImage()">📋 COPY ẢNH BÁO GIÁ</button>
+<button class="light" id="downloadFallback" onclick="downloadQuoteImage()" style="display:none">⬇️ TẢI PNG (NẾU BỊ CHẶN COPY)</button>
 <div class="quote-download-note" id="imageDownloadStatus">Bấm COPY rồi Ctrl + V để dán ảnh trực tiếp vào Zalo hoặc Messenger. (Cần trình duyệt hỗ trợ sao chép ảnh.)</div>
 <label for="output">Văn bản chỉnh sửa trước khi COPY</label>
 <textarea id="output" placeholder="Nội dung báo giá sẽ xuất hiện tại đây. Bạn có thể chỉnh sửa trước khi copy."></textarea>
@@ -344,25 +349,38 @@ async function loadHtml2Canvas(){
 // Đọc thư viện tạo ảnh sớm, để thao tác COPY của người dùng diễn ra nhanh hơn.
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{loadHtml2Canvas().catch(()=>{});});
 else loadHtml2Canvas().catch(()=>{});
+let quotePngBlob=null;
+async function quotePng(){
+ const capture=await loadHtml2Canvas();
+ generate();
+ const canvas=await capture($('visualQuote'),{scale:2,backgroundColor:'#ffffff',useCORS:true,logging:false});
+ return await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Không xuất được PNG')),'image/png'));
+}
+function downloadQuoteImage(){
+ if(!quotePngBlob)return;
+ const url=URL.createObjectURL(quotePngBlob),a=document.createElement('a');
+ a.href=url;a.download='bao-gia-ve-may-bay.png';document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),10000);
+}
 async function copyQuoteImage(){
  const btn=$('saveQuoteImage'),status=$('imageDownloadStatus');
- btn.disabled=true;btn.textContent='⏳ ĐANG COPY ẢNH...';status.textContent='Đang sao chép ảnh báo giá...';
+ btn.disabled=true;btn.textContent='⏳ ĐANG COPY ẢNH...';
+ $('downloadFallback').style.display='none';
  try{
-  generate();
-  if(!navigator.clipboard?.write || !window.ClipboardItem || !window.isSecureContext){
-   throw new Error('Hãy dùng trang GitHub Pages (HTTPS) trên Chrome/Edge để COPY ảnh');
+  if(!window.isSecureContext || !navigator.clipboard?.write || !window.ClipboardItem){
+   throw new Error('Trình duyệt không cấp quyền COPY ảnh (cần GitHub Pages HTTPS / Chrome)');
   }
-  // Đưa thao tác clipboard.write vào ngay trong lần bấm nút.
-  // Trình duyệt hỗ trợ ClipboardItem với Promise sẽ chờ ảnh PNG render xong.
-  const pngPromise=(async()=>{
-   const capture=await loadHtml2Canvas();
-   const canvas=await capture($('visualQuote'),{scale:2,backgroundColor:'#ffffff',useCORS:true,logging:false});
-   return await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Không tạo được ảnh PNG')),'image/png'));
-  })();
-  await navigator.clipboard.write([new ClipboardItem({'image/png':pngPromise})]);
-  status.textContent='✅ ĐÃ COPY ẢNH! Mở Zalo/Messenger và nhấn Ctrl + V để dán ảnh.';
- }catch(e){
-  status.textContent='⚠️ COPY ảnh chưa thành công: '+e.message+'. Hãy dùng Chrome/Edge và cấp quyền clipboard cho trang HTTPS.';
+  // Gọi clipboard.write ngay trong sự kiện click để giữ user activation.
+  const pending=quotePng();
+  await navigator.clipboard.write([new ClipboardItem({'image/png':pending})]);
+  quotePngBlob=await pending;
+  status.textContent='✅ Đã COPY ẢNH. Mở Zalo/Messenger và Ctrl + V.';
+ }catch(error){
+  try{
+   quotePngBlob=await quotePng();
+   $('downloadFallback').style.display='block';
+   status.textContent='⚠️ Chrome chặn COPY: '+error.message+'. Dùng nút TẢI PNG bên dưới để gửi khách.';
+  }catch(e){status.textContent='❌ Không tạo được ảnh: '+e.message;}
  }finally{btn.disabled=false;btn.textContent='📋 COPY ẢNH BÁO GIÁ';}
 }
 
@@ -384,7 +402,7 @@ function calculate(){
  number("adultQty")*number("adultPrice")+
  number("childQty")*number("childPrice")+
  number("infantQty")*number("infantPrice");
- $("total").textContent=fmt(total)+" VNĐ";
+ $("total").textContent=hasTicketPrice()?fmt(total)+" VNĐ":"Chưa nhận giá";
  return total;
 }
 
@@ -427,8 +445,8 @@ function flightSummary(){
 // Một nguồn xác định loại vé cho cả COPY chữ và COPY ảnh.
 function isRoundTrip(){
  const back=val("returnDate");
- if(back)return true; // ngày về do người dùng nhập
- return detected.tripType==="roundtrip" && !!(detected.returnFlight||detected.returnTime);
+ if(back && val("tripMode")!=="connecting")return true; // ngày về do người dùng nhập
+ return val("tripMode")==="roundtrip" || (detected.tripType==="roundtrip" && !!(detected.returnFlight||detected.returnTime));
 }
 function hasTicketPrice(){
  return [["adultQty","adultPrice"],["childQty","childPrice"],["infantQty","infantPrice"]].some(([q,p])=>number(q)>0&&val(p)!=="");
@@ -438,10 +456,11 @@ function generate(){
  renderVisualQuote(total);
  const qty=number("adultQty")+number("childQty")+number("infantQty");
  const roundtrip=isRoundTrip();
+ const connecting=val("tripMode")==="connecting";
  
  const lines=[
   "✈️ THÔNG TIN VÉ MÁY BAY "+
-  (roundtrip?"KHỨ HỒI":"MỘT CHIỀU")+
+  (roundtrip?"KHỨ HỒI":connecting?"NỐI CHUYẾN":"MỘT CHIỀU")+
   " – "+selectedAirline().toUpperCase(),
   "🌏 "+(val("from")||"[Chưa có điểm đi]")+" "+(roundtrip?"⇄":"→")+" "+(val("to")||"[Chưa có điểm đến]"),
   "━━━━━━━━━━━━━━━━━━",
@@ -459,6 +478,7 @@ function generate(){
   if(detected.returnTime)lines.push("🕒 "+detected.returnTime);
  }
 
+ if(connecting)lines.push("⚠️ NHIỀU CHẶNG: đối chiếu các chặng trong ảnh gốc trước khi gửi");
  lines.push("━━━━━━━━━━━━━━━━━━");
  lines.push("🧳 Xách tay: "+val("carry"));
  lines.push("🧳 Ký gửi: "+val("checked"));
@@ -485,11 +505,12 @@ function renderVisualQuote(total){
  const el=$("visualQuote");
  const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
  const roundtrip=isRoundTrip();
+ const connecting=val("tripMode")==="connecting";
  const discount=Math.min(100,Math.max(0,number("discountPercent")));
  const leg=(direction,from,to,date,time,flight)=>`<div class="vq-leg"><div class="vq-leg-top"><span>✈ ${direction}</span><span>${esc(date||"Chưa có ngày")}</span></div><div class="vq-route"><span>${esc(from||"Điểm đi")}</span><i>✈ →</i><span>${esc(to||"Điểm đến")}</span></div><div class="vq-meta"><span>🕒 ${esc(time||"--:--")}</span><span>${esc(flight||"Chưa có mã chuyến")}</span></div></div>`;
  const from=val("from"),to=val("to");
  const final=total*(1-discount/100);
- el.innerHTML=`<div class="vq-header"><div><b>✈ BÁO GIÁ VÉ MÁY BAY</b><small>${esc(selectedAirline())}</small></div><span class="vq-pill">${roundtrip?"KHỨ HỒI":"MỘT CHIỀU"}</span></div><div class="vq-content">${leg("CHIỀU ĐI",from,to,val("outDate"),detected.outTime,detected.outFlight)}${roundtrip?leg("CHIỀU VỀ",to,from,val("returnDate"),detected.returnTime,detected.returnFlight):""}<div class="vq-baggage">🧳 ${esc(val("carry"))} xách tay · ${esc(val("checked"))} ký gửi</div><div class="vq-price"><div class="vq-price-row"><span>Giá vé (${number("adultQty")} NL · ${number("childQty")} TE · ${number("infantQty")} EB)</span><b>${hasTicketPrice()?fmt(total)+" đ":"Chưa nhập giá"}</b></div>${discount&&hasTicketPrice()?`<div class="vq-price-row"><span>🎁 Giảm ${discount}%</span><b>− ${fmt(total-final)} đ</b></div>`:""}<div class="vq-final"><b>TỔNG CỘNG</b><strong>${hasTicketPrice()?fmt(final)+" đ":"Chưa nhập giá"}</strong></div></div><div class="vq-foot">Giá và hành lý cần xác nhận theo vé thực tế</div></div>`;
+ el.innerHTML=`<div class="vq-header"><div><b>✈ BÁO GIÁ VÉ MÁY BAY</b><small>${esc(selectedAirline())}</small></div><span class="vq-pill">${roundtrip?"KHỨ HỒI":connecting?"NỐI CHUYẾN":"MỘT CHIỀU"}</span></div><div class="vq-content">${leg("CHIỀU ĐI",from,to,val("outDate"),detected.outTime,detected.outFlight)}${roundtrip?leg("CHIỀU VỀ",to,from,val("returnDate"),detected.returnTime,detected.returnFlight):""}<div class="vq-baggage">🧳 ${esc(val("carry"))} xách tay · ${esc(val("checked"))} ký gửi</div><div class="vq-price"><div class="vq-price-row"><span>Giá vé (${number("adultQty")} NL · ${number("childQty")} TE · ${number("infantQty")} EB)</span><b>${hasTicketPrice()?fmt(total)+" đ":"Chưa nhập giá"}</b></div>${discount&&hasTicketPrice()?`<div class="vq-price-row"><span>🎁 Giảm ${discount}%</span><b>− ${fmt(total-final)} đ</b></div>`:""}<div class="vq-final"><b>TỔNG CỘNG</b><strong>${hasTicketPrice()?fmt(final)+" đ":"Chưa nhập giá"}</strong></div></div><div class="vq-foot">Giá và hành lý cần xác nhận theo vé thực tế</div></div>`;
 
 }
 
@@ -531,6 +552,43 @@ async function getOCRWorker(){
  })().catch(e=>{ocrWorkerPromise=null;throw e;});
  return ocrWorkerPromise;
 }
+async function enhanceTicketImage(file){
+ const bitmap=await createImageBitmap(file);
+ try{
+  const scale=Math.max(1,Math.min(2.5,1800/bitmap.width));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+  const data=ctx.getImageData(0,0,canvas.width,canvas.height);
+  for(let i=0;i<data.data.length;i+=4){
+   const g=0.299*data.data[i]+0.587*data.data[i+1]+0.114*data.data[i+2];
+   const v=g>210?255:g<110?0:Math.round((g-110)*2.55);
+   data.data[i]=data.data[i+1]=data.data[i+2]=v;
+  }
+  ctx.putImageData(data,0,0);
+  return canvas;
+ }finally{bitmap.close?.();}
+}
+async function cropTicketImage(file, startY, endY, enhance=false){
+ const bmp=await createImageBitmap(file);
+ try {
+  const y=Math.floor(bmp.height*startY), height=Math.max(1,Math.floor(bmp.height*endY)-y);
+  const scale=Math.max(2,Math.min(4,2100/bmp.width));
+  const c=document.createElement('canvas');c.width=Math.round(bmp.width*scale);c.height=Math.round(height*scale);
+  const cx=c.getContext('2d',{willReadFrequently:true});cx.fillStyle='#fff';cx.fillRect(0,0,c.width,c.height);
+  cx.drawImage(bmp,0,y,bmp.width,height,0,0,c.width,c.height);
+  if(enhance){const d=cx.getImageData(0,0,c.width,c.height);for(let i=0;i<d.data.length;i+=4){let gray=d.data[i]*.299+d.data[i+1]*.587+d.data[i+2]*.114;gray=gray>225?255:gray<90?0:Math.round((gray-90)*255/135);d.data[i]=d.data[i+1]=d.data[i+2]=gray;}cx.putImageData(d,0,0);}
+  return c;
+ }finally{bmp.close?.();}
+}
+function distinctFlightCount(t){return new Set([...t.matchAll(/\b(?:VJ|VN|QH|KE|OZ|CI|BR|JL|NH|TW|7C|AK)\s*\d{2,4}\b/gi)].map(m=>m[0].replace(/\s/g,'').toUpperCase())).size;}
+function ocrQuality(t){
+ const f=(t.match(/\b(?:VJ|VN|QH|KE|OZ|CI|BR|JL|NH|TW|7C|AK)\s*\d{2,4}\b/gi)||[]).length;
+ const dates=(t.match(/\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b/g)||[]).length;
+ return f*10+dates*3+(parseTicketMoney(t)?8:0)+Math.min(10,t.length/200);
+}
 async function readTicketImage(){
  if(scanning||!selectedImage)return;
  scanning=true;$("ocrButton").disabled=true;
@@ -540,8 +598,22 @@ async function readTicketImage(){
   const worker=await getOCRWorker();
   const result=await worker.recognize(file);
   if(revision!==imageRevision)return;
-  const text=result.data.text.trim();
-  if(!text)throw new Error("Không đọc được chữ. Hãy cắt sát phần hành trình và dùng ảnh rõ hơn.");
+  let text=result.data.text.trim();
+  // Luôn đọc riêng vùng chuyến đi, chiều về và bảng giá: các cột lệch nhau khi OCR toàn ảnh.
+  try{
+   $('status').textContent='⏳ Đang đọc từng chiều bay và bảng tổng tiền...';
+   const strips=[[0,.38],[.27,.71],[.67,1]];
+   const portions=[];
+   for(const [top,bottom] of strips){
+    const region=await cropTicketImage(file,top,bottom,true);
+    const part=(await worker.recognize(region)).data.text.trim();
+    portions.push(part);
+   }
+   if(revision!==imageRevision)return;
+   // Giữ cả bản đọc gốc lẫn các vùng: tránh đánh mất chặng/giá khi OCR lệch cột.
+   text=[text,...portions.map((p,i)=>p?'--- VÙNG ẢNH '+(i+1)+' ---\n'+p:'')].filter(Boolean).join('\n');
+  }catch(err){console.warn('OCR regions:',err);}
+  if(!text)throw new Error("Không đọc được chữ. Hãy dùng ảnh rõ hơn.");
   $("sourceText").value=text;importPastedTrip();
   $("status").textContent+=" • "+((performance.now()-start)/1000).toFixed(1)+" giây";
  }catch(e){if(revision===imageRevision)$("status").textContent="❌ "+e.message;}
@@ -565,6 +637,8 @@ function cleanAirportName(value){
  if(/(?:ho chi minh|sai gon|saigon|\bsgn\b|tan son nhat)/.test(v))return 'TP. Hồ Chí Minh (SGN)';
  if(/(?:ha noi|hanoi|noi bai|\bhan\b)/.test(v))return 'Hà Nội (HAN)';
  if(/(?:seoul|incheon|\bicn\b)/.test(v))return 'Seoul (ICN)';
+ if(/(?:busan|gimhae|\bpus\b)/.test(v))return 'Busan (PUS)';
+ if(/(?:phu quoc|phuquoc|\bpqc\b)/.test(v))return 'Phú Quốc (PQC)';
  if(/(?:osaka|kansai|\bkix\b)/.test(v))return 'Osaka (KIX)';
  if(/(?:da nang|danang|\bdad\b)/.test(v))return 'Đà Nẵng (DAD)';
  const code=s.match(/\b([A-Z]{3})\b/);
@@ -573,7 +647,7 @@ function cleanAirportName(value){
 }
 function parseLegRoute(line){
  // Nhận tên thành phố hai bên mũi tên; loại bỏ nhà ga (T1/T2) và thứ/ngày.
- const m=line.match(/(.+?)\s*(?:➜|➡|➝|→|➔|⟶|\u279e|\u27a1|\s+to\s+)\s*(.+)/i);
+ const m=line.match(/(.+?)\s*(?:➜|➡|➝|→|➔|⟶|➤|➞|►|\u279e|\u27a1|\s+to\s+)\s*(.+)/i);
  if(!m)return null;
  const a=cleanAirportName(m[1]),b=cleanAirportName(m[2]);
  return a&&b&&a!==b?{from:a,to:b}:null;
@@ -582,9 +656,10 @@ function parsePastedTrip(text){
  const lines=text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
  const flightRE=/\b([A-Z][A-Z0-9]|[0-9][A-Z])\s?(\d{2,4})\b/g;
  const flightLines=[];
+ const seenFlights=new Set();
  lines.forEach((line,i)=>{
-  const m=[...line.matchAll(flightRE)].find(m=>airlines.some(a=>a[0]===m[1]));
-  if(m)flightLines.push({i,flight:m[1]+m[2]});
+  const matches=[...line.matchAll(flightRE)].filter(m=>airlines.some(a=>a[0]===m[1]));
+  for(const m of matches){const flight=m[1]+m[2];if(!seenFlights.has(flight)){flightLines.push({i,flight});seenFlights.add(flight);}}
  });
  const dateRE=/\b(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})\b/g;
  const timeRE=/\b([01]?\d|2[0-3]):([0-5]\d)\b/g;
@@ -604,6 +679,24 @@ function parsePastedTrip(text){
   const times=getTimes(lines[f.i]).length>=2?getTimes(lines[f.i]):getTimes(local);
   return {flight:f.flight,route:routeCandidate?.route||null,date:dates[0]||'',time:times.slice(0,2).join(' → ')};
  });
+ // Nếu OCR đặt tên sân bay thành nhiều cột, suy ra chặng theo các mã IATA
+ // xuất hiện sát mã chuyến; không kết luận nếu không đủ hai sân bay khác nhau.
+ for(const leg of legs){
+  if(leg.route)continue;
+  const f=flightLines.find(x=>x.flight===leg.flight);
+  if(!f)continue;
+  const localLines=lines.slice(Math.max(0,f.i-6),Math.min(lines.length,f.i+3));
+  const codes=[];
+  for(const l of localLines){
+   for(const m of l.matchAll(/\b(?:ICN|SGN|HAN|PUS|PQC|KIX|DAD|NRT|HND|TPE|PVG|HKG|BKK|SIN|KUL)\b/g)){
+    if(!codes.includes(m[0]))codes.push(m[0]);
+   }
+  }
+  if(codes.length===2){
+   const from=cleanAirportName(codes[0]),to=cleanAirportName(codes[1]);
+   if(from&&to&&from!==to)leg.route={from,to};
+  }
+ }
  const allDates=getDates(text), allTimes=getTimes(text);
  const allPorts=[...text.matchAll(/\b[A-Z]{3}\b/g)].map(m=>airports.find(a=>a.includes('('+m[0]+')'))).filter(Boolean);
  return {legs, flights:legs.map(x=>x.flight),dates:[...new Set(allDates)],times:allTimes,ports:allPorts,
@@ -612,45 +705,66 @@ function parsePastedTrip(text){
 // Đọc giá từ chữ OCR: ưu tiên dòng tổng, tránh lấy nhầm giá từng chặng.
 function parseTicketMoney(raw){
  const rows=raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
- const amounts=t=>{
-  const found=[];
-  const re=/(?:\d{1,3}(?:[.,\s]\d{3}){1,3}|\d{5,10})(?:\s*(?:đ|₫|VND|VNĐ))?/gi;
-  for(const m of t.matchAll(re)){
-   const v=Number(m[0].replace(/[^\d]/g,''));
-   if(v>=10000 && v<=1000000000)found.push(v);
+ const normal=x=>x.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ function amounts(str){
+  const result=[];
+  // Nhận 6,650,000 / 6.650.000 / 6650000, không nhầm ngày hay giờ.
+  const re=/(?:\d{1,3}(?:[.,\s]\d{3}){2,3}|\d{1,3}[.,\s]\d{3}|\d{6,9})(?:\s*(?:đ|₫|VND|VNĐ))?/gi;
+  for(const m of str.matchAll(re)){
+   const n=Number(m[0].replace(/\D/g,''));
+   if(n>=10000&&n<=300000000)result.push(n);
   }
-  return found;
- };
- const totalLabel=/(?:tổng\s*(?:giá\s*vé|tiền|cộng|thanh\s*toán)|total\s*(?:fare|price|amount)|grand\s*total|amount\s*due)/i;
- const feeLabel=/(?:thuế\s*\+?\s*phí|tax(?:es)?\s*(?:\+|and)?\s*(?:fee|charge))/i;
- const fareLabel=/(?:vé\s*người\s*lớn|giá\s*vé|base\s*fare|adult\s*fare)/i;
- let sum=null,fee=null,fare=null;
- for(let i=0;i<rows.length;i++){
-  let r=rows[i];
-  // Tìm giá sau nhãn, hoặc ở dòng kế nếu OCR ngắt hàng.
-  const get=rx=>{
-   const m=r.match(rx);if(!m)return null;
-   const direct=amounts(r.slice(m.index+m[0].length));
-   if(direct.length)return direct.at(-1);
-   const next=rows[i+1]||'';
-   return /^(?:[\d\s.,]+\s*(?:đ|₫|VND|VNĐ)?)$/i.test(next)?amounts(next)[0]||null:null;
-  };
-  if(totalLabel.test(r)){const v=get(totalLabel);if(v!==null)sum=v;}
-  else if(feeLabel.test(r)){const v=get(feeLabel);if(v!==null)fee=v;}
-  else if(fareLabel.test(r)){const v=get(fareLabel);if(v!==null)fare=v;}
+  return result;
  }
- if(sum!==null)return {total:sum,source:'tổng giá vé'};
- // Chỉ cộng nếu cả giá vé lẫn thuế phí đều đọc được rõ ràng.
- if(fare!==null&&fee!==null)return {total:fare+fee,source:'giá vé + thuế phí'};
+ const labels={
+  total:/tong\s*(?:gia\s*ve|tien|cong|thanh\s*toan)|thanh\s*tien|grand\s*total|total\s*(?:fare|price|amount|payment|vnd)|amount\s*due/i,
+  fee:/thue\s*(?:va|\+|&)\s*phi|thue\s*phi|tax(?:es)?\s*(?:\+|and)?\s*(?:fee|charge)/i,
+  fare:/gia\s*ve|ve\s*nguoi\s*lon|base\s*fare|adult\s*fare|ticket\s*fare/i
+ };
+ const found={};
+ rows.forEach((row,i)=>{
+  const plain=normal(row);
+  for(const [kind,re] of Object.entries(labels)){
+   const hit=re.exec(plain);if(!hit)continue;
+   const right=amounts(row.slice(hit.index+hit[0].length));
+   const next=rows[i+1]&&/^\s*[\d.,\s]+\s*(?:đ|₫|VND|VNĐ)?\s*$/i.test(rows[i+1])?amounts(rows[i+1]):[];
+   const value=right.at(-1)||next[0];
+   if(value)found[kind]=value;
+  }
+ });
+ if(found.total)return {total:found.total,source:'tổng giá vé trên ảnh',confidence:'high'};
+ if(found.fare&&found.fee)return {total:found.fare+found.fee,source:'giá vé cộng thuế phí',confidence:'high'};
+ // Bảng giá 3 cột: OCR có thể ghép mọi nhãn trước, rồi mới đọc lần lượt các số.
+ const compact=normal(raw);
+ const hasFare=labels.fare.test(compact),hasFee=labels.fee.test(compact),hasTotal=labels.total.test(compact);
+ const candidates=amounts(raw);
+ if(hasTotal&&candidates.length>=3){
+  // Chỉ chấp nhận khi số tổng = giá vé + thuế phí, tránh lấy nhầm từ ảnh khác.
+  for(let i=0;i<candidates.length;i++)for(let j=i+1;j<candidates.length;j++){
+   const sum=candidates[i]+candidates[j];
+   if(candidates.slice(j+1).includes(sum))return {total:sum,source:'đối chiếu giá vé + thuế + tổng',confidence:'medium'};
+  }
+ }
+ if(hasFare&&hasFee&&hasTotal&&candidates.length>=3){
+  const recent=candidates.slice(-3);
+  if(recent[0]+recent[1]===recent[2])return {total:recent[2],source:'ba cột tiền cuối bảng',confidence:'medium'};
+ }
+ // Số tổng được lặp lại ở dòng cuối của nhiều bảng đặt vé.
+ if(hasTotal&&candidates.length>=2){
+  const last=candidates[candidates.length-1];
+  const repeats=candidates.filter(x=>x===last).length;
+  if(repeats>=2 && last>=100000)return {total:last,source:'tổng giá lặp lại trong bảng',confidence:'medium'};
+ }
  return null;
 }
+
 function importPastedTrip(){
  const text=val('sourceText');if(!text)return;
  const r=parsePastedTrip(text);
  detected={};
  for(const id of ['from','to','outDate','returnDate','adultPrice','childPrice','infantPrice'])$(id).value='';
  const detectedPrice=parseTicketMoney(text);
- if(detectedPrice)$('adultPrice').value=detectedPrice.total;
+ if(detectedPrice)$('adultPrice').value=detectedPrice.total; // Tổng trong ảnh: mặc định 1 người, kiểm tra nếu nhiều khách
  $('discountPercent').value=0;
  $('adultQty').value=1;$('childQty').value=0;$('infantQty').value=0;
  if(r.flights[0]){
@@ -665,10 +779,15 @@ function importPastedTrip(){
  const backRoute=inward.route||r.routes[1]||null;
  const explicitReturn=/chiều về|ngày về|\breturn\b|khứ hồi|round\s*trip/i.test(text);
  const reversed=!!(route&&backRoute&&route.from===backRoute.to&&route.to===backRoute.from);
+ // OCR có thể chỉ đọc tuyến chiều đi; nếu văn bản rõ ràng có hai chuyến đối ứng,
+ // vẫn cần hai tuyến cụ thể hoặc nhãn chiều về để xác nhận khứ hồi.
  // Hai chuyến nối tiếp không có chiều quay về KHÔNG được coi là khứ hồi.
- const roundtrip=reversed||(explicitReturn&&r.flights.length>1&&(!route||!backRoute||reversed));
+ const roundtrip=r.flights.length>1 && (reversed||(explicitReturn&&(!route||!backRoute||reversed)));
  const connection=r.flights.length>1&&!roundtrip;
+ // Thiếu tuyến chiều về thì chưa đủ bằng chứng để khẳng định một chiều.
+ const unresolvedTwoLegs=r.flights.length>1&&!route; 
  detected.tripType=roundtrip?'roundtrip':connection?'connecting':'oneway';
+ $('tripMode').value=detected.tripType;
  if(!roundtrip){delete detected.returnFlight;delete detected.returnTime;}
  // Không suy ra chiều đi từ danh sách mã sân bay toàn ảnh: có thể bị đảo bởi chiều về.
  if(route){$('from').value=route.from;$('to').value=route.to;}
@@ -684,6 +803,8 @@ function importPastedTrip(){
  if(!$('outDate').value)missing.push('ngày bay');
  if(!detected.outTime.includes('→'))missing.push('giờ bay');
  if(!detectedPrice)missing.push('tổng tiền vé');
+ if(connection)missing.push('xác minh hai chặng: khứ hồi hay nối chuyến (ảnh/OCR chưa đủ tuyến)');
+ if(r.routes.length>=2 && r.flights.length<2)missing.push('mã chuyến bay thứ hai (OCR chưa đọc đủ)');
  $('status').textContent=(conflicts?'⚠️ Có nhiều chặng nhưng chưa xác nhận khứ hồi; kiểm tra hành trình. ':roundtrip?'✅ Đã nhận diện vé KHỨ HỒI. ':'✅ Đã nhận diện vé MỘT CHIỀU. ')+(missing.length?'Chưa nhận được '+missing.join(', ')+'. ':'')+(detectedPrice?'Đã đọc tổng tiền '+fmt(detectedPrice.total)+' VNĐ ('+detectedPrice.source+'). ':'')+'Kiểm tra lại thông tin trước khi gửi khách.';
 }
 $("sourceText").addEventListener("input",importPastedTrip);
@@ -705,7 +826,7 @@ function resetForm(){
  $("adultQty").value=1;
  $("childQty").value=0;
  $("infantQty").value=0;
- $("airline").value="VJ";
+ $("airline").value="VJ";$("tripMode").value="oneway";
  $("otherAirline").value="";
  detected={};
  fillFlightTimes();
@@ -720,7 +841,7 @@ function resetForm(){
  $("status").textContent="Dán ảnh vé mới để tự điền.";
  changeAirline();
  flightSummary();
- calculate();
+ generate();
 }
 
 changeAirline();
@@ -729,6 +850,7 @@ calculate();
 generate();
 $("ticketEditor").addEventListener("input",event=>{
  if(["sourceText","imageFile"].includes(event.target.id))return;
+ if(event.target.id==="returnDate" && val("returnDate"))$("tripMode").value="roundtrip";
  if(event.target.id==="returnDate" && !val("returnDate")){
   detected.tripType="oneway";detected.returnFlight="";detected.returnTime="";
  }
@@ -736,6 +858,7 @@ $("ticketEditor").addEventListener("input",event=>{
 });
 $("ticketEditor").addEventListener("change",event=>{
  if(["sourceText","imageFile"].includes(event.target.id))return;
+ if(event.target.id==="returnDate" && val("returnDate"))$("tripMode").value="roundtrip";
  if(event.target.id==="returnDate" && !val("returnDate")){
   detected.tripType="oneway";detected.returnFlight="";detected.returnTime="";
  }

@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Đọc ảnh vé & Copy báo giá</title>
+<title>AIRBOOKING PRO | Đọc ảnh vé & Báo giá</title>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#edf3fa;font-family:Arial,sans-serif;color:#243750}
@@ -77,11 +77,19 @@ textarea{height:320px;line-height:1.65;resize:vertical;margin-top:10px}
 .quotePanel .note{margin:5px 0}.quotePanel #output{height:175px;min-height:175px;font-size:12px;margin-top:7px}
 .quotePanel button{padding:10px;margin-top:7px}
 .quote-download-note{font-size:11px;color:#64748b;margin:4px 0 0}.discount-bar{display:flex;align-items:center;gap:8px;margin-top:8px}.discount-bar label{margin:0;flex:1}.discount-bar input{max-width:90px;padding:7px}
+/* AIRBOOKING PRO: only header branding, original workspace retained */
+.brand{background:#101827;color:#f6c453;padding:16px 20px;border-radius:12px;letter-spacing:1px;display:flex;align-items:center;gap:12px}
+.brand-icon{display:inline-block;color:#ffd46b;font-size:32px;animation:airGlow 2.8s ease-in-out infinite}
+.brand-caption{color:#98732d;font-size:11px;font-weight:bold;letter-spacing:1px;margin:10px 0}
+@keyframes airGlow{0%,100%{opacity:1;text-shadow:0 0 3px #ffc94a}50%{opacity:.65;text-shadow:0 0 15px #ffd86c,0 0 24px #d99c12}}
+@media(prefers-reduced-motion:reduce){.brand-icon{animation:none}}
+.extra-leg{background:#f7faff;border:1px solid #dce8f6;border-radius:10px;padding:12px;margin:9px 0}
+.extra-leg h4{margin:0 0 8px;color:#214c82}
 </style>
 </head>
 <body>
 <main class="app">
-<h2>✈️ ĐỌC ẢNH VÉ & COPY BÁO GIÁ</h2>
+<h2 class="brand"><span class="brand-icon">✈</span> AIRBOOKING PRO</h2><p class="brand-caption">HỆ THỐNG ĐỌC ẢNH VÉ & COPY BÁO GIÁ CHO ĐẠI LÝ</p>
 <p class="sub">Dán ảnh tự điền • Hành lý • Ngày bay • Tính giá • Copy báo giá</p>
 
 <div class="workspace"><section id="ticketEditor"><h3>📸 1. DÁN ẢNH VÉ</h3>
@@ -130,6 +138,7 @@ textarea{height:320px;line-height:1.65;resize:vertical;margin-top:10px}
 <div><label>Chiều về – Giờ khởi hành</label><input id="returnDepart" type="time" oninput="updateFlightTimes()"></div>
 <div><label>Chiều về – Giờ đến</label><input id="returnArrive" type="time" oninput="updateFlightTimes()"></div>
 </div>
+<div id="extraLegs"></div><button type="button" class="light" onclick="addLeg()">＋ THÊM CHẶNG BAY</button>
 <div class="note">Giờ địa phương tại từng sân bay. Kiểm tra ngày đến nếu chuyến bay qua đêm.</div>
 <div class="mini" id="flightSummary">
  Mã chuyến và giờ bay sẽ tự hiển thị ở đây sau khi đọc ảnh.
@@ -451,6 +460,26 @@ function isRoundTrip(){
 function hasTicketPrice(){
  return [["adultQty","adultPrice"],["childQty","childPrice"],["infantQty","infantPrice"]].some(([q,p])=>number(q)>0&&val(p)!=="");
 }
+function allQuoteLegs(){
+ const out={from:val('from'),to:val('to'),date:val('outDate'),flight:detected.outFlight||'',time:detected.outTime||''};
+ const legs=[out];
+ if(isRoundTrip())legs.push({from:val('to'),to:val('from'),date:val('returnDate'),flight:detected.returnFlight||'',time:detected.returnTime||''});
+ if(val('tripMode')==='connecting'){
+  const extras=[...document.querySelectorAll('.extra-leg')].map(el=>({from:el.querySelector('[data-field=from]').value,to:el.querySelector('[data-field=to]').value,date:el.querySelector('[data-field=date]').value,flight:el.querySelector('[data-field=flight]').value,time:el.querySelector('[data-field=time]').value}));
+  return [out,...extras];
+ }
+ return legs;
+}
+function addLeg(data={}){
+ $('tripMode').value='connecting';detected.tripType='connecting';
+ const box=document.createElement('div');box.className='extra-leg';
+ const fields=[['from','Điểm đi'],['to','Điểm đến'],['date','Ngày bay'],['flight','Mã chuyến'],['time','Giờ đi → giờ đến']];
+ const h=document.createElement('h4');h.textContent='✈ CHẶNG '+(document.querySelectorAll('.extra-leg').length+2);box.appendChild(h);
+ const grid=document.createElement('div');grid.className='grid';
+ for(const [key,label] of fields){const wrap=document.createElement('div');const lab=document.createElement('label');lab.textContent=label;const inp=document.createElement('input');inp.dataset.field=key;inp.placeholder=label;inp.value=data[key]||'';inp.addEventListener('input',generate);wrap.append(lab,inp);grid.appendChild(wrap)}
+ box.appendChild(grid);const remove=document.createElement('button');remove.className='light';remove.textContent='XÓA CHẶNG NÀY';remove.onclick=()=>{box.remove();generate()};box.appendChild(remove);$('extraLegs').appendChild(box);generate();
+}
+function syncExtraLegs(legs){$('extraLegs').innerHTML='';if(legs.length>1){$('tripMode').value='connecting';for(const leg of legs.slice(1))addLeg({from:leg.route?.from||'',to:leg.route?.to||'',date:leg.date||'',flight:leg.flight||'',time:leg.time||''});}}
 function generate(){
  const total=calculate();
  renderVisualQuote(total);
@@ -510,7 +539,8 @@ function renderVisualQuote(total){
  const leg=(direction,from,to,date,time,flight)=>`<div class="vq-leg"><div class="vq-leg-top"><span>✈ ${direction}</span><span>${esc(date||"Chưa có ngày")}</span></div><div class="vq-route"><span>${esc(from||"Điểm đi")}</span><i>✈ →</i><span>${esc(to||"Điểm đến")}</span></div><div class="vq-meta"><span>🕒 ${esc(time||"--:--")}</span><span>${esc(flight||"Chưa có mã chuyến")}</span></div></div>`;
  const from=val("from"),to=val("to");
  const final=total*(1-discount/100);
- el.innerHTML=`<div class="vq-header"><div><b>✈ BÁO GIÁ VÉ MÁY BAY</b><small>${esc(selectedAirline())}</small></div><span class="vq-pill">${roundtrip?"KHỨ HỒI":connecting?"NỐI CHUYẾN":"MỘT CHIỀU"}</span></div><div class="vq-content">${leg("CHIỀU ĐI",from,to,val("outDate"),detected.outTime,detected.outFlight)}${roundtrip?leg("CHIỀU VỀ",to,from,val("returnDate"),detected.returnTime,detected.returnFlight):""}<div class="vq-baggage">🧳 ${esc(val("carry"))} xách tay · ${esc(val("checked"))} ký gửi</div><div class="vq-price"><div class="vq-price-row"><span>Giá vé (${number("adultQty")} NL · ${number("childQty")} TE · ${number("infantQty")} EB)</span><b>${hasTicketPrice()?fmt(total)+" đ":"Chưa nhập giá"}</b></div>${discount&&hasTicketPrice()?`<div class="vq-price-row"><span>🎁 Giảm ${discount}%</span><b>− ${fmt(total-final)} đ</b></div>`:""}<div class="vq-final"><b>TỔNG CỘNG</b><strong>${hasTicketPrice()?fmt(final)+" đ":"Chưa nhập giá"}</strong></div></div><div class="vq-foot">Giá và hành lý cần xác nhận theo vé thực tế</div></div>`;
+ const extraHtml=connecting?[...document.querySelectorAll(".extra-leg")].map((node,i)=>{const get=k=>node.querySelector(`[data-field="${k}"]`)?.value||"";return leg("CHẶNG "+(i+2),get("from"),get("to"),get("date"),get("time"),get("flight"));}).join(""):"";
+ el.innerHTML=`<div class="vq-header"><div><b>✈ BÁO GIÁ VÉ MÁY BAY</b><small>${esc(selectedAirline())}</small></div><span class="vq-pill">${roundtrip?"KHỨ HỒI":connecting?"NỐI CHUYẾN":"MỘT CHIỀU"}</span></div><div class="vq-content">${leg("CHIỀU ĐI",from,to,val("outDate"),detected.outTime,detected.outFlight)}${roundtrip?leg("CHIỀU VỀ",to,from,val("returnDate"),detected.returnTime,detected.returnFlight):""}${extraHtml}<div class="vq-baggage">🧳 ${esc(val("carry"))} xách tay · ${esc(val("checked"))} ký gửi</div><div class="vq-price"><div class="vq-price-row"><span>Giá vé (${number("adultQty")} NL · ${number("childQty")} TE · ${number("infantQty")} EB)</span><b>${hasTicketPrice()?fmt(total)+" đ":"Chưa nhập giá"}</b></div>${discount&&hasTicketPrice()?`<div class="vq-price-row"><span>🎁 Giảm ${discount}%</span><b>− ${fmt(total-final)} đ</b></div>`:""}<div class="vq-final"><b>TỔNG CỘNG</b><strong>${hasTicketPrice()?fmt(final)+" đ":"Chưa nhập giá"}</strong></div></div><div class="vq-foot">Giá và hành lý cần xác nhận theo vé thực tế</div></div>`;
 
 }
 
@@ -821,7 +851,7 @@ function importPastedTrip(){
  const regionLegs=parseRegionTrip(text);
  if(regionLegs.length>=2){
   // OCR nhận tên/mã chặng rõ hơn tại từng vùng; giữ chiều đi xuất hiện trước.
-  r.legs=regionLegs.slice(0,2);
+  r.legs=regionLegs;
   r.flights=r.legs.map(x=>x.flight);
   r.routes=r.legs.map(x=>x.route).filter(Boolean);
  }
@@ -847,12 +877,13 @@ function importPastedTrip(){
  // vẫn cần hai tuyến cụ thể hoặc nhãn chiều về để xác nhận khứ hồi.
  // Hai chuyến nối tiếp không có chiều quay về KHÔNG được coi là khứ hồi.
  const roundtrip=r.flights.length>1 && (reversed||(explicitReturn&&(!route||!backRoute||reversed)));
- const connection=r.flights.length>1&&!roundtrip&&!!(route&&backRoute&&!reversed);
+ const connection=r.flights.length>1&&!roundtrip&&(r.flights.length>2||!!(route&&backRoute&&!reversed));
  // Thiếu tuyến chiều về thì chưa đủ bằng chứng để khẳng định một chiều.
  const unresolvedTwoLegs=r.flights.length>1&&!roundtrip&&!connection; 
  detected.tripType=roundtrip?'roundtrip':connection?'connecting':unresolvedTwoLegs?'unresolved':'oneway';
  $('tripMode').value=detected.tripType==='unresolved'?'oneway':detected.tripType;
  if(!roundtrip){delete detected.returnFlight;delete detected.returnTime;}
+ syncExtraLegs(connection?r.legs:[]);
  // Không suy ra chiều đi từ danh sách mã sân bay toàn ảnh: có thể bị đảo bởi chiều về.
  if(route){$('from').value=route.from;$('to').value=route.to;}
  else if(r.ports.length>=2&&r.ports[0]!==r.ports[1]){$('from').value=r.ports[0];$('to').value=r.ports[1];}
@@ -869,7 +900,7 @@ function importPastedTrip(){
  if(!detectedPrice)missing.push('tổng tiền vé');
  if(connection||unresolvedTwoLegs)missing.push('chưa xác định được hai chiều, vui lòng chọn loại hành trình');
  if(r.routes.length>=2 && r.flights.length<2)missing.push('mã chuyến bay thứ hai (OCR chưa đọc đủ)');
- $('status').textContent=(unresolvedTwoLegs?'⚠️ Có hai chuyến nhưng chưa xác định khứ hồi. ':conflicts?'⚠️ Cần kiểm tra hành trình. ':roundtrip?'✅ Đã nhận diện vé KHỨ HỒI. ':'✅ Đã nhận diện vé MỘT CHIỀU. ')+(missing.length?'Chưa nhận được '+missing.join(', ')+'. ':'')+(detectedPrice?'Đã đọc tổng tiền '+fmt(detectedPrice.total)+' VNĐ ('+detectedPrice.source+'). ':'')+'Kiểm tra lại thông tin trước khi gửi khách.';
+ $('status').textContent=(unresolvedTwoLegs?'⚠️ Có hai chuyến nhưng chưa xác định khứ hồi. ':conflicts?'⚠️ Cần kiểm tra hành trình. ':roundtrip?'✅ Đã nhận diện vé KHỨ HỒI. ':connection?'✅ Phát hiện hành trình NHIỀU CHẶNG. ':'✅ Đã nhận diện vé MỘT CHIỀU. ')+(missing.length?'Chưa nhận được '+missing.join(', ')+'. ':'')+(detectedPrice?'Đã đọc tổng tiền '+fmt(detectedPrice.total)+' VNĐ ('+detectedPrice.source+'). ':'')+'Kiểm tra lại thông tin trước khi gửi khách.';
 }
 $("sourceText").addEventListener("input",importPastedTrip);
 document.addEventListener("paste",e=>{
@@ -892,7 +923,7 @@ function resetForm(){
  $("infantQty").value=0;
  $("airline").value="VJ";$("tripMode").value="oneway";
  $("otherAirline").value="";
- detected={};
+ detected={};$('extraLegs').innerHTML='';
  fillFlightTimes();
  imageRevision++;
  selectedImage=null;

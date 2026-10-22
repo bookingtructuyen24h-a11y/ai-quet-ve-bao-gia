@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AIRBOOKING PRO | Đọc ảnh vé & Báo giá</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%23101827%22%2F%3E%3Cpath%20d%3D%22M9%2034%20L54%2012%20Q59%2010%2056%2017%20L39%2054%20Q37%2058%2034%2051%20L29%2037%20L15%2037%20Q8%2037%209%2034Z%22%20fill%3D%22%23f6c453%22%2F%3E%3Cpath%20d%3D%22M29%2037%20L54%2013%20L35%2044%22%20fill%3D%22none%22%20stroke%3D%22%23fff2bb%22%20stroke-width%3D%223%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E">
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#edf3fa;font-family:Arial,sans-serif;color:#243750}
@@ -481,52 +482,29 @@ function addLeg(data={}){
 }
 function syncExtraLegs(legs){$('extraLegs').innerHTML='';if(legs.length>1){$('tripMode').value='connecting';for(const leg of legs.slice(1))addLeg({from:leg.route?.from||'',to:leg.route?.to||'',date:leg.date||'',flight:leg.flight||'',time:leg.time||''});}}
 function generate(){
- const total=calculate();
- renderVisualQuote(total);
- const qty=number("adultQty")+number("childQty")+number("infantQty");
- const roundtrip=isRoundTrip();
- const connecting=val("tripMode")==="connecting";
- 
- const lines=[
-  "✈️ THÔNG TIN VÉ MÁY BAY "+
-  (roundtrip?"KHỨ HỒI":connecting?"NỐI CHUYẾN":"MỘT CHIỀU")+
-  " – "+selectedAirline().toUpperCase(),
-  "🌏 "+(val("from")||"[Chưa có điểm đi]")+" "+(roundtrip?"⇄":"→")+" "+(val("to")||"[Chưa có điểm đến]"),
-  "━━━━━━━━━━━━━━━━━━",
-  "🛫 CHIỀU ĐI"
- ];
-
- if(val("outDate"))lines.push("📅 "+val("outDate"));
- if(detected.outFlight)lines.push("✈️ Chuyến bay: "+detected.outFlight);
- if(detected.outTime)lines.push("🕒 "+detected.outTime);
-
- if(roundtrip){
-  lines.push("🛬 CHIỀU VỀ");
-  if(val("returnDate"))lines.push("📅 "+val("returnDate"));
-  if(detected.returnFlight)lines.push("✈️ Chuyến bay: "+detected.returnFlight);
-  if(detected.returnTime)lines.push("🕒 "+detected.returnTime);
- }
-
- if(connecting)lines.push("⚠️ NHIỀU CHẶNG: đối chiếu các chặng trong ảnh gốc trước khi gửi");
- lines.push("━━━━━━━━━━━━━━━━━━");
- lines.push("🧳 Xách tay: "+val("carry"));
- lines.push("🧳 Ký gửi: "+val("checked"));
- lines.push("👥 Tổng hành khách: "+qty);
-
- if(number("adultQty"))lines.push("👤 Người lớn: "+number("adultQty"));
- if(number("childQty"))lines.push("🧒 Trẻ em: "+number("childQty"));
- if(number("infantQty"))lines.push("👶 Em bé: "+number("infantQty"));
-
- lines.push(
-  "━━━━━━━━━━━━━━━━━━",
-  "🎁🎁🎁 GIÁ VÉ ƯU ĐÃI ĐẶC BIỆT",
-  ...(Number(val("discountPercent"))>0?["🎁 Giảm giá: "+Number(val("discountPercent"))+"% (−"+fmt(total*Math.min(100,Math.max(0,number("discountPercent")))/100)+" VNĐ)"]:[]),
-  "💰 TỔNG THANH TOÁN: "+(hasTicketPrice()?fmt(total*(1-Math.min(100,Math.max(0,number("discountPercent")))/100))+" VNĐ":"Chưa nhập giá"),
-  "━━━━━━━━━━━━━━━━━━",
-  "Giá vé, lịch bay và hành lý cần xác nhận theo điều kiện đặt chỗ thực tế."
- );
-
- $("output").value=lines.join("\n");
+ const total=calculate();renderVisualQuote(total);
+ const qty=number('adultQty')+number('childQty')+number('infantQty');
+ const legs=allQuoteLegs();const mode=val('tripMode');
+ const kind=mode==='connecting'?'NHIỀU CHẶNG':mode==='roundtrip'?'KHỨ HỒI':'MỘT CHIỀU';
+ const lines=['✈️ VÉ MÁY BAY '+kind+' – '+selectedAirline().toUpperCase(),'━━━━━━━━━━━━━━━━━━'];
+ legs.forEach((leg,i)=>{
+   const heading=mode==='roundtrip'?(i===0?'🛫 CHIỀU ĐI':'🛬 CHIỀU VỀ'):'✈️ CHẶNG '+(i+1);
+   lines.push(heading);
+   lines.push('🌏 '+(leg.from||'[Chưa có điểm đi]')+' → '+(leg.to||'[Chưa có điểm đến]'));
+   lines.push('📅 Ngày bay: '+(leg.date||'[Chưa nhận ngày]'));
+   lines.push('⏰ '+(leg.time||'[Chưa nhận giờ]'));
+   lines.push('✈️ Chuyến bay: '+(leg.flight||'[Chưa nhận mã chuyến]'));
+   lines.push('━━━━━━━━━━━━━━━━━━');
+ });
+ lines.push('🧳 Xách tay: '+val('carry'),'🧳 Ký gửi: '+val('checked'),'👥 Tổng hành khách: '+qty);
+ if(number('adultQty'))lines.push('👤 Người lớn: '+number('adultQty'));
+ if(number('childQty'))lines.push('🧒 Trẻ em: '+number('childQty'));
+ if(number('infantQty'))lines.push('👶 Em bé: '+number('infantQty'));
+ const discount=Math.min(100,Math.max(0,number('discountPercent')));
+ lines.push('━━━━━━━━━━━━━━━━━━','🎁🎁🎁 GIÁ VÉ ƯU ĐÃI ĐẶC BIỆT');
+ if(discount)lines.push('🎁 Giảm giá: '+discount+'% (−'+fmt(total*discount/100)+' VNĐ)');
+ lines.push('💰 TỔNG THANH TOÁN: '+(hasTicketPrice()?fmt(total*(1-discount/100))+' VNĐ':'Chưa nhập giá'),'━━━━━━━━━━━━━━━━━━','Giá vé, lịch bay và hành lý cần xác nhận theo điều kiện đặt chỗ thực tế.');
+ $('output').value=lines.join('\n');
 }
 
 function renderVisualQuote(total){
@@ -539,8 +517,9 @@ function renderVisualQuote(total){
  const leg=(direction,from,to,date,time,flight)=>`<div class="vq-leg"><div class="vq-leg-top"><span>✈ ${direction}</span><span>${esc(date||"Chưa có ngày")}</span></div><div class="vq-route"><span>${esc(from||"Điểm đi")}</span><i>✈ →</i><span>${esc(to||"Điểm đến")}</span></div><div class="vq-meta"><span>🕒 ${esc(time||"--:--")}</span><span>${esc(flight||"Chưa có mã chuyến")}</span></div></div>`;
  const from=val("from"),to=val("to");
  const final=total*(1-discount/100);
- const extraHtml=connecting?[...document.querySelectorAll(".extra-leg")].map((node,i)=>{const get=k=>node.querySelector(`[data-field="${k}"]`)?.value||"";return leg("CHẶNG "+(i+2),get("from"),get("to"),get("date"),get("time"),get("flight"));}).join(""):"";
- el.innerHTML=`<div class="vq-header"><div><b>✈ BÁO GIÁ VÉ MÁY BAY</b><small>${esc(selectedAirline())}</small></div><span class="vq-pill">${roundtrip?"KHỨ HỒI":connecting?"NỐI CHUYẾN":"MỘT CHIỀU"}</span></div><div class="vq-content">${leg("CHIỀU ĐI",from,to,val("outDate"),detected.outTime,detected.outFlight)}${roundtrip?leg("CHIỀU VỀ",to,from,val("returnDate"),detected.returnTime,detected.returnFlight):""}${extraHtml}<div class="vq-baggage">🧳 ${esc(val("carry"))} xách tay · ${esc(val("checked"))} ký gửi</div><div class="vq-price"><div class="vq-price-row"><span>Giá vé (${number("adultQty")} NL · ${number("childQty")} TE · ${number("infantQty")} EB)</span><b>${hasTicketPrice()?fmt(total)+" đ":"Chưa nhập giá"}</b></div>${discount&&hasTicketPrice()?`<div class="vq-price-row"><span>🎁 Giảm ${discount}%</span><b>− ${fmt(total-final)} đ</b></div>`:""}<div class="vq-final"><b>TỔNG CỘNG</b><strong>${hasTicketPrice()?fmt(final)+" đ":"Chưa nhập giá"}</strong></div></div><div class="vq-foot">Giá và hành lý cần xác nhận theo vé thực tế</div></div>`;
+ const extraHtml=connecting?[...document.querySelectorAll('.extra-leg')].map((node,i)=>{const get=k=>node.querySelector(`[data-field="${k}"]`)?.value||"";return leg("CHẶNG "+(i+2),get("from"),get("to"),get("date"),get("time"),get("flight"));}).join(""):"";
+
+ el.innerHTML=`<div class="vq-header"><div><b>✈ BÁO GIÁ VÉ MÁY BAY</b><small>${esc(selectedAirline())}</small></div><span class="vq-pill">${connecting?"NHIỀU CHẶNG":roundtrip?"KHỨ HỒI":"MỘT CHIỀU"}</span></div><div class="vq-content">${leg("CHIỀU ĐI",from,to,val("outDate"),detected.outTime,detected.outFlight)}${roundtrip?leg("CHIỀU VỀ",to,from,val("returnDate"),detected.returnTime,detected.returnFlight):""}${extraHtml}<div class="vq-baggage">🧳 ${esc(val("carry"))} xách tay · ${esc(val("checked"))} ký gửi</div><div class="vq-price"><div class="vq-price-row"><span>Giá vé (${number("adultQty")} NL · ${number("childQty")} TE · ${number("infantQty")} EB)</span><b>${hasTicketPrice()?fmt(total)+" đ":"Chưa nhập giá"}</b></div>${discount&&hasTicketPrice()?`<div class="vq-price-row"><span>🎁 Giảm ${discount}%</span><b>− ${fmt(total-final)} đ</b></div>`:""}<div class="vq-final"><b>TỔNG CỘNG</b><strong>${hasTicketPrice()?fmt(final)+" đ":"Chưa nhập giá"}</strong></div></div><div class="vq-foot">Giá và hành lý cần xác nhận theo vé thực tế</div></div>`;
 
 }
 
@@ -656,7 +635,7 @@ function useImage(file){
  previewURL=URL.createObjectURL(file);
  $("preview").src=previewURL;$("preview").style.display="block";
  // Không giữ thông tin của ảnh trước trong khi chờ nhận ảnh mới.
- detected={};
+ detected={};$('extraLegs').innerHTML='';
  for(const id of ['from','to','outDate','returnDate','adultPrice','childPrice','infantPrice','outDepart','outArrive','returnDepart','returnArrive'])$(id).value='';
  $('sourceText').value='';
  $('status').textContent='⏳ Đang tự điền thông tin từ ảnh vé...';
@@ -671,6 +650,8 @@ function cleanAirportName(value){
  const v=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toLowerCase();
  if(/(?:ho\s*chi\s*minh|sai gon|saigon|\bsgn\b|tan son nhat)/.test(v))return 'TP. Hồ Chí Minh (SGN)';
  if(/(?:ha noi|hanoi|noi bai|\bhan\b)/.test(v))return 'Hà Nội (HAN)';
+  if(/(?:can tho|\bvca\b)/.test(v))return 'Cần Thơ (VCA)';
+ if(/(?:dai trung|taichung|\brmq\b)/.test(v))return 'Đài Trung (RMQ)';
  if(/(?:seoul|incheon|\bicn\b)/.test(v))return 'Seoul (ICN)';
  if(/(?:busan|gimhae|\bpus\b)/.test(v))return 'Busan (PUS)';
  if(/(?:phu quoc|phuquoc|\bpqc\b)/.test(v))return 'Phú Quốc (PQC)';
@@ -696,14 +677,14 @@ function parseFlightRegion(raw){
  // Ưu tiên tuyến ở hàng đầu của từng vùng OCR. Tên thành phố có thể bị OCR
  // viết sai dấu hoặc ICN thành CN; chỉ xác định khi có đủ hai địa danh.
  const norm=t.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
- const firstLine=norm.split(/\r?\n/).find(x=>/seoul|chi\s*minh|busan|phu\s*quoc|ha\s*noi|osaka/.test(x))||'';
+ const firstLine=norm.split(/\r?\n/).find(x=>/seoul|chi\s*minh|busan|phu\s*quoc|ha\s*noi|can\s*tho|osaka/.test(x))||'';
  const named=[];
- const placeRE=/(seoul|(?:tp\s*)?h[oỏ]\s*chi\s*minh|(?:tp\s*)?ho\s*chi\s*minh|busan|phu\s*quoc|ha\s*noi|osaka)/gi;
+ const placeRE=/(seoul|(?:tp\s*)?h[oỏ]\s*chi\s*minh|(?:tp\s*)?ho\s*chi\s*minh|busan|phu\s*quoc|ha\s*noi|can\s*tho|osaka)/gi;
  for(const m of firstLine.matchAll(placeRE)){
   const airport=cleanAirportName(m[0]);
   if(airport && !named.includes(airport))named.push(airport);
  }
- const airportCodes=[...t.toUpperCase().matchAll(/\b(?:HAN|SGN|ICN|PUS|PQC|KIX|ITM|NRT|HND|TPE|DAD|CXR|NGO|FUK|CTS|KUL|SIN|BKK|HKG|PVG)\b/g)]
+ const airportCodes=[...t.toUpperCase().matchAll(/\b(?:HAN|SGN|VCA|ICN|PUS|PQC|KIX|ITM|NRT|HND|TPE|DAD|CXR|NGO|FUK|CTS|KUL|SIN|BKK|HKG|PVG)\b/g)]
   .map(m=>m[0]).filter((c,i,a)=>a.indexOf(c)===i);
  const route=named.length>=2?{from:named[0],to:named[1]}:
   airportCodes.length===2?{from:cleanAirportName(airportCodes[0]),to:cleanAirportName(airportCodes[1])}:null;
@@ -775,7 +756,7 @@ function parsePastedTrip(text){
   const localLines=lines.slice(Math.max(0,f.i-6),Math.min(lines.length,f.i+3));
   const codes=[];
   for(const l of localLines){
-   for(const m of l.matchAll(/\b(?:ICN|SGN|HAN|PUS|PQC|KIX|DAD|NRT|HND|TPE|PVG|HKG|BKK|SIN|KUL)\b/g)){
+   for(const m of l.matchAll(/\b(?:ICN|SGN|HAN|VCA|PUS|PQC|KIX|DAD|NRT|HND|TPE|PVG|HKG|BKK|SIN|KUL)\b/g)){
     if(!codes.includes(m[0]))codes.push(m[0]);
    }
   }
@@ -845,28 +826,73 @@ function parseTicketMoney(raw){
  return null;
 }
 
+// Parser theo từng dòng hành trình; không ghép sân bay từ các chặng khác nhau.
+function parseReliableLegs(raw){
+ // Parse theo từng tuyến trong bản OCR gốc; các vùng cắt chỉ bổ sung dữ liệu thiếu.
+ const chunks=String(raw).split(/\n--- VÙNG (?:ẢNH|CHẶNG|GIÁ) \d+ ---\s*\n/i);
+ const names={SGN:'TP. Hồ Chí Minh (SGN)',VCS:'Côn Đảo (VCS)',HAN:'Hà Nội (HAN)',VCA:'Cần Thơ (VCA)',RMQ:'Đài Trung (RMQ)',PQC:'Phú Quốc (PQC)'};
+ const norm=t=>String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/gi,'d').toLowerCase();
+ function route(line){
+  const t=norm(line).replace(/\b(?:rmo|8mo)\b/g,'rmq').replace(/\bpoc\b/g,'pqc').replace(/con\s*d[3a]o/g,'con dao');
+  const patterns=[['SGN',/(?:tp\.?\s*)?(?:ho\s*chi\s*minh|hochiminh)|\bsgn\b/g],['VCS',/con\s*dao|\bvcs\b/g],['HAN',/ha\s*noi|hanoi|\bhan\b/g],['VCA',/can\s*tho|cantho|\bvca\b/g],['RMQ',/taichung|tai\s*chung|dai\s*trung|\brmq\b/g],['PQC',/phu\s*quoc|phuquoc|\bpqc\b/g]];
+  const hits=[];for(const [code,re] of patterns)for(const m of t.matchAll(re))hits.push({code,pos:m.index});
+  hits.sort((a,b)=>a.pos-b.pos);const codes=[];for(const h of hits)if(codes.at(-1)!==h.code)codes.push(h.code);
+  return codes.length>=2&&codes[0]!==codes[1]?{from:names[codes[0]],to:names[codes[1]]}:null;
+ }
+ const dates=t=>[...String(t).matchAll(/\b([0-3]?\d)[\/.\-]([01]?\d)(?:[\/.\-](20\d\d))?\b/g)].filter(m=>+m[1]>=1&&+m[1]<=31&&+m[2]>=1&&+m[2]<=12).map(m=>m[1].padStart(2,'0')+'/'+m[2].padStart(2,'0')+(m[3]?'/'+m[3]:''));
+ const times=t=>[...String(t).matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g)].map(m=>m[1].padStart(2,'0')+':'+m[2]);
+ function flight(t){const m=String(t).match(/\b(VJ|VN|QH|VU|KE|OZ|CI|BR|JL|NH|TW|7C|AK|SQ|TG|CX|JX|TR|FD|D7|MH)\s*([0-9]{2,4}|[0-9]{1,3}[eEoO][0-9])\b/i);return m?(m[1]+m[2].replace(/[eE]/g,'6').replace(/[oO]/g,'0')).toUpperCase():'';}
+ const legs=[];
+ for(let chunkIndex=0;chunkIndex<chunks.length;chunkIndex++){
+  const lines=chunks[chunkIndex].split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const headers=lines.map((line,i)=>({i,route:route(line)})).filter(x=>x.route);
+  for(let h=0;h<headers.length;h++){
+   const head=headers[h],next=headers[h+1]?.i??lines.length;
+   const block=lines.slice(head.i,next).join(' ');
+   const f=flight(block),ts=times(block),date=dates(lines[head.i])[0]||dates(block)[0]||'';
+   const key=head.route.from+'|'+head.route.to+'|'+date;
+   let leg=legs.find(x=>x.key===key || (x.route.from===head.route.from&&x.route.to===head.route.to&&(!x.date||!date)));
+   if(!leg){leg={key,route:head.route,flight:'',date:'',time:'',source:chunkIndex};legs.push(leg);}
+   if(!leg.flight&&f)leg.flight=f;
+   if(!leg.date&&date)leg.date=date;
+   if(!leg.time&&ts.length>=2)leg.time=ts.slice(0,2).join(' → ');
+  }
+ }
+ // Chỉ bổ sung mã chuyến theo thứ tự nếu OCR không thể gắn mã vào từng dòng tuyến.
+ const flights=[];for(const chunk of chunks)for(const line of chunk.split(/\r?\n/)){const f=flight(line);if(f&&!flights.includes(f))flights.push(f);}
+ if(flights.length===legs.length)legs.forEach((leg,i)=>{if(!leg.flight)leg.flight=flights[i];});
+ // Nếu ảnh có ngày không năm, chỉ suy năm khi có bằng chứng qua mốc giao năm.
+ const dated=legs.map(x=>x.date).filter(x=>/^\d\d\/\d\d\/20\d\d$/.test(x));
+ for(const leg of legs)if(/^\d\d\/\d\d$/.test(leg.date)){
+  const month=+leg.date.slice(3,5);const future=dated.find(x=>+x.slice(3,5)<month);
+  if(future&&month>=11&&+future.slice(3,5)<=2)leg.date+='/'+(+future.slice(6)-1);
+ }
+ return legs.map(({key,source,...leg})=>leg);
+}
 function importPastedTrip(){
  const text=val('sourceText');if(!text)return;
  const r=parsePastedTrip(text);
+ const reliableLegs=parseReliableLegs(text);
+ if(reliableLegs.length){r.legs=reliableLegs;r.flights=reliableLegs.map(x=>x.flight).filter(Boolean);r.routes=reliableLegs.map(x=>x.route).filter(Boolean);}
  const regionLegs=parseRegionTrip(text);
- if(regionLegs.length>=2){
+ if(!reliableLegs.length && regionLegs.length>=2 && regionLegs.every(x=>x.route&&x.date&&x.time) && regionLegs.length>=r.legs.length){
   // OCR nhận tên/mã chặng rõ hơn tại từng vùng; giữ chiều đi xuất hiện trước.
   r.legs=regionLegs;
   r.flights=r.legs.map(x=>x.flight);
   r.routes=r.legs.map(x=>x.route).filter(Boolean);
  }
- detected={};
+ detected={};$('extraLegs').innerHTML='';
  for(const id of ['from','to','outDate','returnDate','adultPrice','childPrice','infantPrice'])$(id).value='';
  const detectedPrice=parseMoneyRegions(text);
  if(detectedPrice)$('adultPrice').value=detectedPrice.total; // Tổng trong ảnh: mặc định 1 người, kiểm tra nếu nhiều khách
  $('discountPercent').value=0;
  $('adultQty').value=1;$('childQty').value=0;$('infantQty').value=0;
- if(r.flights[0]){
-  detected.outFlight=r.flights[0];
-  const code=airlines.find(a=>r.flights[0].startsWith(a[0]));
+ if(r.legs[0]?.flight){
+  detected.outFlight=r.legs[0].flight;
+  const code=airlines.find(a=>r.legs[0].flight.startsWith(a[0]));
   if(code)$('airline').value=code[0];
  }
- if(r.flights[1])detected.returnFlight=r.flights[1];
+ if(r.legs[1]?.flight)detected.returnFlight=r.legs[1].flight;
  const outward=r.legs[0]||{};
  const inward=r.legs[1]||{};
  const route=outward.route||r.routes[0]||null;
@@ -876,21 +902,21 @@ function importPastedTrip(){
  // OCR có thể chỉ đọc tuyến chiều đi; nếu văn bản rõ ràng có hai chuyến đối ứng,
  // vẫn cần hai tuyến cụ thể hoặc nhãn chiều về để xác nhận khứ hồi.
  // Hai chuyến nối tiếp không có chiều quay về KHÔNG được coi là khứ hồi.
- const roundtrip=r.flights.length>1 && (reversed||(explicitReturn&&(!route||!backRoute||reversed)));
- const connection=r.flights.length>1&&!roundtrip&&(r.flights.length>2||!!(route&&backRoute&&!reversed));
+ const roundtrip=r.legs.length===2 && (reversed||(explicitReturn&&(!route||!backRoute||reversed))); 
+ const connection=r.legs.length>2 || (r.legs.length>1&&!roundtrip&&!!(route&&backRoute&&!reversed));
  // Thiếu tuyến chiều về thì chưa đủ bằng chứng để khẳng định một chiều.
- const unresolvedTwoLegs=r.flights.length>1&&!roundtrip&&!connection; 
+ const unresolvedTwoLegs=r.legs.length>1&&!roundtrip&&!connection; 
  detected.tripType=roundtrip?'roundtrip':connection?'connecting':unresolvedTwoLegs?'unresolved':'oneway';
  $('tripMode').value=detected.tripType==='unresolved'?'oneway':detected.tripType;
  if(!roundtrip){delete detected.returnFlight;delete detected.returnTime;}
  syncExtraLegs(connection?r.legs:[]);
  // Không suy ra chiều đi từ danh sách mã sân bay toàn ảnh: có thể bị đảo bởi chiều về.
  if(route){$('from').value=route.from;$('to').value=route.to;}
- else if(r.ports.length>=2&&r.ports[0]!==r.ports[1]){$('from').value=r.ports[0];$('to').value=r.ports[1];}
- $('outDate').value=outward.date||r.dates[0]||'';
- if(roundtrip)$('returnDate').value=inward.date||r.dates[1]||'';
- detected.outTime=outward.time||r.times.slice(0,2).join(' → ');
- if(roundtrip)detected.returnTime=inward.time||r.times.slice(2,4).join(' → ');
+ // Không lấy hai sân bay bất kỳ trong toàn ảnh làm tuyến bay đầu tiên.
+ $('outDate').value=outward.date||'';
+ if(roundtrip)$('returnDate').value=inward.date||'';
+ detected.outTime=outward.time||'';
+ if(roundtrip)detected.returnTime=inward.time||'';
  const conflicts=connection || (roundtrip&&route&&backRoute&&!reversed);
  changeAirline();fillFlightTimes();flightSummary();generate();
  const missing=[];
@@ -898,8 +924,9 @@ function importPastedTrip(){
  if(!$('outDate').value)missing.push('ngày bay');
  if(!detected.outTime.includes('→'))missing.push('giờ bay');
  if(!detectedPrice)missing.push('tổng tiền vé');
- if(connection||unresolvedTwoLegs)missing.push('chưa xác định được hai chiều, vui lòng chọn loại hành trình');
- if(r.routes.length>=2 && r.flights.length<2)missing.push('mã chuyến bay thứ hai (OCR chưa đọc đủ)');
+ if(unresolvedTwoLegs)missing.push('chưa xác định được hai chiều, vui lòng chọn loại hành trình');
+ if(connection&&r.legs.some(x=>!x.route||!x.date))missing.push('tuyến hoặc ngày ở một số chặng');
+ if(r.legs.length>=2 && r.legs.some(x=>!x.flight))missing.push('mã chuyến bay ở một số chặng (OCR chưa đọc đủ)');
  $('status').textContent=(unresolvedTwoLegs?'⚠️ Có hai chuyến nhưng chưa xác định khứ hồi. ':conflicts?'⚠️ Cần kiểm tra hành trình. ':roundtrip?'✅ Đã nhận diện vé KHỨ HỒI. ':connection?'✅ Phát hiện hành trình NHIỀU CHẶNG. ':'✅ Đã nhận diện vé MỘT CHIỀU. ')+(missing.length?'Chưa nhận được '+missing.join(', ')+'. ':'')+(detectedPrice?'Đã đọc tổng tiền '+fmt(detectedPrice.total)+' VNĐ ('+detectedPrice.source+'). ':'')+'Kiểm tra lại thông tin trước khi gửi khách.';
 }
 $("sourceText").addEventListener("input",importPastedTrip);
